@@ -1,0 +1,23 @@
+sources:
+  - name: "pizza_db"
+    type: "sqlite"
+    connection:
+      filepath: "/data/pizza.db"
+    query: "SELECT id, name, toppings FROM pizzas;"
+
+destinations:
+  - name: "home_db"
+    type: "sqlite"
+    connection:
+      filepath: "/data/home.db"
+
+transformations:
+  - source: "pizza_db"
+    target: "home_db.deliveries"
+    fields:
+      - source: "id"
+        target: "id"
+      - source: "name"
+        target: "name"
+      - source: "toppings"
+        target: "toppings"

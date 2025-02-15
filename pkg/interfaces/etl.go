@@ -20,12 +20,7 @@ type FieldMapping struct {
 }
 
 type ETL struct {
-	Name         string      `yaml:"name"`
-	Sources      []DBStorage `yaml:"sources"`
-	Destinations []DBStorage `yaml:"destinations"`
-}
-
-type Pipeline struct {
-	Name string `yaml:"name"`
-	Jobs []ETL  `yaml:"jobs"`
+	Sources         []DBStorage      `yaml:"sources"`
+	Destinations    []DBStorage      `yaml:"destinations"`
+	Transformations []Transformation `yaml:"transformations"`
 }
