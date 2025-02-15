@@ -3,17 +3,17 @@ sources:
     type: "sqlite"
     connection:
       filepath: "/data/pizza.db"
-    query: "SELECT id, name, toppings FROM pizzas;"
+    query: "SELECT id, name, toppings FROM pizza;"
 
 destinations:
-  - name: "home_db"
+  - name: "delivery_db"
     type: "sqlite"
     connection:
-      filepath: "/data/home.db"
+      filepath: "/data/delivery.db"
 
 transformations:
   - source: "pizza_db"
-    target: "home_db.deliveries"
+    target: "delivery_db.delivery"
     fields:
       - source: "id"
         target: "id"
