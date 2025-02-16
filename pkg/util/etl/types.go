@@ -1,4 +1,4 @@
-package interfaces
+package etl
 
 type DBStorage struct {
 	Name       string            `yaml:"name"`
