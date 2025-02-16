@@ -16,7 +16,7 @@ const SCHEMA = `
 	toppings TEXT NOT NULL
 `
 
-func InitDB(name string, insertDummyData bool) {
+func initDB(name string, insertDummyData bool) {
 	fileName := name + ".db"
 
 	if _, err := os.Stat(fileName); errors.Is(err, os.ErrNotExist) {
@@ -55,6 +55,6 @@ func InitDB(name string, insertDummyData bool) {
 }
 
 func main() {
-	InitDB("pizza", true)
-	InitDB("delivery", false)
+	initDB("pizza", true)
+	initDB("delivery", false)
 }

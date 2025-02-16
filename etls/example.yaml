@@ -3,7 +3,7 @@ sources:
     type: "sqlite"
     connection:
       filepath: "/data/pizza.db"
-    query: "SELECT id, name, toppings FROM pizza;"
+    query: "SELECT name, toppings FROM pizza;"
 
 destinations:
   - name: "delivery_db"
@@ -15,8 +15,6 @@ transformations:
   - source: "pizza_db"
     target: "delivery_db.delivery"
     fields:
-      - source: "id"
-        target: "id"
       - source: "name"
         target: "name"
       - source: "toppings"
