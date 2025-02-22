@@ -2,16 +2,16 @@ sources:
   - name: "pizza_db"
     type: "sqlite"
     connection:
-      filepath: "/data/pizza.db"
+      filepath: "pizza.db"
     query: "SELECT name, toppings FROM pizza;"
 
 destinations:
   - name: "delivery_db"
     type: "sqlite"
     connection:
-      filepath: "/data/delivery.db"
+      filepath: "delivery.db"
 
-transformations:
+pipelines:
   - source: "pizza_db"
     target: "delivery_db.delivery"
     fields:

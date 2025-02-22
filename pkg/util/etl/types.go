@@ -7,7 +7,7 @@ type DBStorage struct {
 	Query      string            `yaml:"query"`
 }
 
-type Transformation struct {
+type Pipeline struct {
 	Source string         `yaml:"source"`
 	Target string         `yaml:"target"`
 	Fields []FieldMapping `yaml:"fields"`
@@ -20,7 +20,7 @@ type FieldMapping struct {
 }
 
 type ETL struct {
-	Sources         []DBStorage      `yaml:"sources"`
-	Destinations    []DBStorage      `yaml:"destinations"`
-	Transformations []Transformation `yaml:"transformations"`
+	Sources      []DBStorage `yaml:"sources"`
+	Destinations []DBStorage `yaml:"destinations"`
+	Pipelines    []Pipeline  `yaml:"pipelines"`
 }
