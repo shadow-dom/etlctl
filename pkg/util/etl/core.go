@@ -13,10 +13,6 @@ import (
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
-func extract() (interface{}, error) {
-	return nil, nil
-}
-
 func readConfig(path string) (*ETL, error) {
 	data, err := os.ReadFile("../etls/" + path)
 
@@ -75,7 +71,38 @@ func getDataStorageInfo(name string, storages []DBStorage) (*DBStorage, error) {
 		}
 	}
 
-	return nil, errors.New(fmt.Sprintf("invalid data storage requested: %s", name))
+	response := fmt.Sprintf("invalid data storage requested: %s", name)
+
+	return nil, errors.New(response)
+}
+
+func extract(rows *sql.Rows, cols []string) []map[string]string {
+	data := []map[string]string{}
+
+	for rows.Next() {
+		columnValues := make([]sql.NullString, len(cols))
+		columnPointers := make([]interface{}, len(cols))
+		for i := range columnValues {
+			columnPointers[i] = &columnValues[i]
+		}
+
+		if err := rows.Scan(columnPointers...); err != nil {
+			log.Fatal("Failed to scan row:", err)
+		}
+
+		rowData := make(map[string]string)
+		for i, colName := range cols {
+			if columnValues[i].Valid {
+				rowData[colName] = columnValues[i].String
+			} else {
+				rowData[colName] = ""
+			}
+		}
+
+		data = append(data, rowData)
+	}
+
+	return data
 }
 
 func Run(name string) {
@@ -128,28 +155,7 @@ func Run(name string) {
 				log.Fatal("Failed to get column names:", err)
 			}
 
-			data := make(map[string]string)
-
-			if rows.Next() {
-				columnPointers := make([]interface{}, len(cols))
-				columnValues := make([]sql.NullString, len(cols))
-
-				for i := range columnPointers {
-					columnPointers[i] = &columnValues[i]
-				}
-
-				if err := rows.Scan(columnPointers...); err != nil {
-					log.Fatal("Failed to scan row:", err)
-				}
-
-				for i, colName := range cols {
-					if columnValues[i].Valid {
-						data[colName] = columnValues[i].String
-					} else {
-						data[colName] = ""
-					}
-				}
-			}
+			data := extract(rows, cols)
 
 			fmt.Println(data)
 		} else {
@@ -168,30 +174,7 @@ func Run(name string) {
 				log.Fatal("Failed to get column names:", err)
 			}
 
-			data := []map[string]string{}
-
-			for rows.Next() {
-				columnValues := make([]sql.NullString, len(cols))
-				columnPointers := make([]interface{}, len(cols))
-				for i := range columnValues {
-					columnPointers[i] = &columnValues[i]
-				}
-
-				if err := rows.Scan(columnPointers...); err != nil {
-					log.Fatal("Failed to scan row:", err)
-				}
-
-				rowData := make(map[string]string)
-				for i, colName := range cols {
-					if columnValues[i].Valid {
-						rowData[colName] = columnValues[i].String
-					} else {
-						rowData[colName] = ""
-					}
-				}
-
-				data = append(data, rowData)
-			}
+			data := extract(rows, cols)
 
 			// Prepare insert statement for destination
 			insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
@@ -217,5 +200,4 @@ func Run(name string) {
 			}
 		}
 	}
-
 }
