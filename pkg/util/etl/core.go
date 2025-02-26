@@ -48,14 +48,20 @@ func getFields(fields []FieldMapping) ([]string, []string) {
 	return sourceFields, targetFields
 }
 
-func getDataForColumns(fields []string, data map[string]string) string {
-	result := make([]string, 0, len(fields))
+func getDataForColumns(fields []string, data []map[string]string) string {
+	results := make([]string, 0, len(data))
 
-	for _, field := range fields {
-		result = append(result, data[field])
+	for _, row := range data {
+		rowValues := make([]string, 0, len(fields))
+
+		for _, field := range fields {
+			rowValues = append(rowValues, fmt.Sprintf("\"%s\"", row[field]))
+		}
+
+		results = append(results, fmt.Sprintf("(%s)", strings.Join(rowValues, ", ")))
 	}
 
-	return strings.Join(result, ", ")
+	return strings.Join(results, ", ")
 }
 
 func getSQLColumns(fields []string) string {
@@ -147,7 +153,7 @@ func Run(name string) {
 
 			fmt.Println(data)
 		} else {
-			query := fmt.Sprintf("SELECT %s FROM %s", getSQLColumns(sourceFields), sourceInfo[1])
+			query := fmt.Sprintf("SELECT %s FROM %s;", getSQLColumns(sourceFields), sourceInfo[1])
 
 			rows, err := sourceDB.Query(query)
 
@@ -162,9 +168,10 @@ func Run(name string) {
 				log.Fatal("Failed to get column names:", err)
 			}
 
-			data := make(map[string]string)
+			data := make([]map[string]string, 0)
+			row := 0
 
-			if rows.Next() {
+			for rows.Next() {
 				columnPointers := make([]interface{}, len(cols))
 				columnValues := make([]sql.NullString, len(cols))
 
@@ -176,32 +183,43 @@ func Run(name string) {
 					log.Fatal("Failed to scan row:", err)
 				}
 
+				data = append(data, make(map[string]string))
+
 				for i, colName := range cols {
 					if columnValues[i].Valid {
-						data[colName] = columnValues[i].String
+						data[row][colName] = columnValues[i].String
 					} else {
-						data[colName] = ""
+						data[row][colName] = ""
 					}
 				}
+
+				row++
 			}
-			fmt.Println(data)
+
+			fmt.Println(row)
 
 			// Prepare insert statement for destination
-			insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+			insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
 				destinationInfo[1],
-				destinationFields,
+				getSQLColumns(destinationFields),
 				getDataForColumns(sourceFields, data),
 			)
 
-			// destinationDB, err := connectToDatabase("../etls/data/" + destination.Connection["filepath"])
+			fmt.Println(insertSQL)
 
-			// if err != nil {
-			// 	log.Fatalf("Failed to connect to destination: %v", err)
-			// }
+			destinationDB, err := connectToDatabase("../etls/data/" + destination.Connection["filepath"])
 
-			// defer sourceDB.Close()
+			if err != nil {
+				log.Fatalf("Failed to connect to destination: %v", err)
+			}
 
-			fmt.Println((insertSQL))
+			defer destinationDB.Close()
+
+			_, err = destinationDB.Exec(insertSQL)
+
+			if err != nil {
+				log.Fatalf("Failed to insert: %v", err)
+			}
 		}
 	}
 
