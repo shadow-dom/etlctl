@@ -48,6 +48,16 @@ func getFields(fields []FieldMapping) ([]string, []string) {
 	return sourceFields, targetFields
 }
 
+func getDataForColumns(fields []string, data map[string]string) string {
+	result := make([]string, 0, len(fields))
+
+	for _, field := range fields {
+		result = append(result, data[field])
+	}
+
+	return strings.Join(result, ", ")
+}
+
 func getSQLColumns(fields []string) string {
 	return strings.Join(fields, ", ")
 }
@@ -71,13 +81,6 @@ func Run(name string) {
 
 	for _, pipeline := range etl.Pipelines {
 		sourceFields, destinationFields := getFields(pipeline.Fields)
-
-		sourceColumns := getSQLColumns(sourceFields)
-		destinationColumns := getSQLColumns(destinationFields)
-
-		fmt.Println(sourceColumns)
-		fmt.Println(destinationColumns)
-
 		sourceInfo := strings.Split(pipeline.Source, ".")
 		destinationInfo := strings.Split(pipeline.Target, ".")
 
@@ -98,7 +101,7 @@ func Run(name string) {
 		sourceDB, err := connectToDatabase("../etls/data/" + source.Connection["filepath"])
 
 		if err != nil {
-			log.Fatalf("Failed to connect to destination: %v", err)
+			log.Fatalf("Failed to connect to source: %v", err)
 		}
 
 		defer sourceDB.Close()
@@ -143,6 +146,62 @@ func Run(name string) {
 			}
 
 			fmt.Println(data)
+		} else {
+			query := fmt.Sprintf("SELECT %s FROM %s", getSQLColumns(sourceFields), sourceInfo[1])
+
+			rows, err := sourceDB.Query(query)
+
+			if err != nil {
+				log.Fatal("Query execution failed:", err)
+			}
+			defer rows.Close()
+
+			cols, err := rows.Columns()
+
+			if err != nil {
+				log.Fatal("Failed to get column names:", err)
+			}
+
+			data := make(map[string]string)
+
+			if rows.Next() {
+				columnPointers := make([]interface{}, len(cols))
+				columnValues := make([]sql.NullString, len(cols))
+
+				for i := range columnPointers {
+					columnPointers[i] = &columnValues[i]
+				}
+
+				if err := rows.Scan(columnPointers...); err != nil {
+					log.Fatal("Failed to scan row:", err)
+				}
+
+				for i, colName := range cols {
+					if columnValues[i].Valid {
+						data[colName] = columnValues[i].String
+					} else {
+						data[colName] = ""
+					}
+				}
+			}
+			fmt.Println(data)
+
+			// Prepare insert statement for destination
+			insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+				destinationInfo[1],
+				destinationFields,
+				getDataForColumns(sourceFields, data),
+			)
+
+			// destinationDB, err := connectToDatabase("../etls/data/" + destination.Connection["filepath"])
+
+			// if err != nil {
+			// 	log.Fatalf("Failed to connect to destination: %v", err)
+			// }
+
+			// defer sourceDB.Close()
+
+			fmt.Println((insertSQL))
 		}
 	}
 

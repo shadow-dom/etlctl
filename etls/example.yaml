@@ -3,7 +3,6 @@ sources:
     type: "sqlite"
     connection:
       filepath: "pizza.db"
-    query: "SELECT name, toppings FROM pizza;"
 
 destinations:
   - name: "delivery_db"
@@ -12,7 +11,7 @@ destinations:
       filepath: "delivery.db"
 
 pipelines:
-  - source: "pizza_db"
+  - source: "pizza_db.pizza"
     target: "delivery_db.delivery"
     fields:
       - source: "name"
