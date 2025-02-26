@@ -168,14 +168,12 @@ func Run(name string) {
 				log.Fatal("Failed to get column names:", err)
 			}
 
-			data := make([]map[string]string, 0)
-			row := 0
+			data := []map[string]string{}
 
 			for rows.Next() {
-				columnPointers := make([]interface{}, len(cols))
 				columnValues := make([]sql.NullString, len(cols))
-
-				for i := range columnPointers {
+				columnPointers := make([]interface{}, len(cols))
+				for i := range columnValues {
 					columnPointers[i] = &columnValues[i]
 				}
 
@@ -183,20 +181,17 @@ func Run(name string) {
 					log.Fatal("Failed to scan row:", err)
 				}
 
-				data = append(data, make(map[string]string))
-
+				rowData := make(map[string]string)
 				for i, colName := range cols {
 					if columnValues[i].Valid {
-						data[row][colName] = columnValues[i].String
+						rowData[colName] = columnValues[i].String
 					} else {
-						data[row][colName] = ""
+						rowData[colName] = ""
 					}
 				}
 
-				row++
+				data = append(data, rowData)
 			}
-
-			fmt.Println(row)
 
 			// Prepare insert statement for destination
 			insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
