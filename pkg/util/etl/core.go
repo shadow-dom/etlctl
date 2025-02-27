@@ -2,47 +2,12 @@ package etl
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
-	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	_ "github.com/mattn/go-sqlite3"
 )
-
-func readConfig(path string) (*ETL, error) {
-	data, err := os.ReadFile("../etls/" + path)
-
-	if err != nil {
-		return nil, err
-	}
-
-	var etl ETL
-	if err := yaml.Unmarshal(data, &etl); err != nil {
-		return nil, err
-	}
-
-	return &etl, nil
-}
-
-func connectToDatabase(file string) (*sql.DB, error) {
-	return sql.Open("sqlite3", file)
-}
-
-func getFields(fields []FieldMapping) ([]string, []string) {
-	sourceFields := make([]string, 0, len(fields))
-	targetFields := make([]string, 0, len(fields))
-
-	for _, field := range fields {
-		sourceFields = append(sourceFields, field.Source)
-		targetFields = append(targetFields, field.Target)
-	}
-
-	return sourceFields, targetFields
-}
 
 func getDataForColumns(fields []string, data []map[string]string) string {
 	results := make([]string, 0, len(data))
@@ -58,22 +23,6 @@ func getDataForColumns(fields []string, data []map[string]string) string {
 	}
 
 	return strings.Join(results, ", ")
-}
-
-func getSQLColumns(fields []string) string {
-	return strings.Join(fields, ", ")
-}
-
-func getDataStorageInfo(name string, storages []DBStorage) (*DBStorage, error) {
-	for _, storage := range storages {
-		if storage.Name == name {
-			return &storage, nil
-		}
-	}
-
-	response := fmt.Sprintf("invalid data storage requested: %s", name)
-
-	return nil, errors.New(response)
 }
 
 func extract(rows *sql.Rows, cols []string) []map[string]string {
@@ -106,31 +55,31 @@ func extract(rows *sql.Rows, cols []string) []map[string]string {
 }
 
 func Run(name string) {
-	etl, err := readConfig(name + ".yaml")
+	etl, err := CreateETL(name + ".yaml")
 
 	if err != nil {
 		log.Fatalf("Failed to load etl from config: %v", err)
 	}
 
 	for _, pipeline := range etl.Pipelines {
-		sourceFields, destinationFields := getFields(pipeline.Fields)
+		sourceFields, targetFields := pipeline.GetFields()
 
-		sourceInfo := strings.Split(pipeline.Source, ".")
-		destinationInfo := strings.Split(pipeline.Target, ".")
+		sourceName, sourceTable := pipeline.GetSourceInfo()
+		targetName, targetTable := pipeline.GetTargetInfo()
 
-		source, err := getDataStorageInfo(sourceInfo[0], etl.Sources)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		destination, err := getDataStorageInfo(destinationInfo[0], etl.Destinations)
+		source, err := etl.GetSource(sourceName)
 
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		sourceDB, err := connectToDatabase("../etls/data/" + source.Connection["filepath"])
+		target, err := etl.GetTarget(targetName)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		sourceDB, err := source.Connect()
 
 		if err != nil {
 			log.Fatalf("Failed to connect to source: %v", err)
@@ -148,7 +97,7 @@ func Run(name string) {
 			}
 			defer rows.Close()
 		} else {
-			query := fmt.Sprintf("SELECT %s FROM %s;", getSQLColumns(sourceFields), sourceInfo[1])
+			query := fmt.Sprintf("SELECT %s FROM %s;", strings.Join(sourceFields, ", "), sourceTable)
 
 			rows, err = sourceDB.Query(query)
 
@@ -166,22 +115,22 @@ func Run(name string) {
 
 		data := extract(rows, cols)
 
-		// Prepare insert statement for destination
+		// Prepare insert statement for target
 		insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
-			destinationInfo[1],
-			getSQLColumns(destinationFields),
+			targetTable,
+			strings.Join(targetFields, ", "),
 			getDataForColumns(sourceFields, data),
 		)
 
-		destinationDB, err := connectToDatabase("../etls/data/" + destination.Connection["filepath"])
+		targetDB, err := target.Connect()
 
 		if err != nil {
-			log.Fatalf("Failed to connect to destination: %v", err)
+			log.Fatalf("Failed to connect to target: %v", err)
 		}
 
-		defer destinationDB.Close()
+		defer targetDB.Close()
 
-		_, err = destinationDB.Exec(insertSQL)
+		_, err = targetDB.Exec(insertSQL)
 
 		if err != nil {
 			log.Fatalf("Failed to insert: %v", err)
