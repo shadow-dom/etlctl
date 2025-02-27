@@ -114,6 +114,7 @@ func Run(name string) {
 
 	for _, pipeline := range etl.Pipelines {
 		sourceFields, destinationFields := getFields(pipeline.Fields)
+
 		sourceInfo := strings.Split(pipeline.Source, ".")
 		destinationInfo := strings.Split(pipeline.Target, ".")
 
@@ -129,8 +130,6 @@ func Run(name string) {
 			log.Fatal(err)
 		}
 
-		fmt.Println(destination)
-
 		sourceDB, err := connectToDatabase("../etls/data/" + source.Connection["filepath"])
 
 		if err != nil {
@@ -139,65 +138,53 @@ func Run(name string) {
 
 		defer sourceDB.Close()
 
-		fmt.Println(source.Query)
+		var rows *sql.Rows
 
 		if source.Query != "" {
-			rows, err := sourceDB.Query(source.Query)
+			rows, err = sourceDB.Query(source.Query)
 
 			if err != nil {
 				log.Fatal("Query execution failed:", err)
 			}
 			defer rows.Close()
-
-			cols, err := rows.Columns()
-
-			if err != nil {
-				log.Fatal("Failed to get column names:", err)
-			}
-
-			data := extract(rows, cols)
-
-			fmt.Println(data)
 		} else {
 			query := fmt.Sprintf("SELECT %s FROM %s;", getSQLColumns(sourceFields), sourceInfo[1])
 
-			rows, err := sourceDB.Query(query)
+			rows, err = sourceDB.Query(query)
 
 			if err != nil {
 				log.Fatal("Query execution failed:", err)
 			}
 			defer rows.Close()
+		}
 
-			cols, err := rows.Columns()
+		cols, err := rows.Columns()
 
-			if err != nil {
-				log.Fatal("Failed to get column names:", err)
-			}
+		if err != nil {
+			log.Fatal("Failed to get column names:", err)
+		}
 
-			data := extract(rows, cols)
+		data := extract(rows, cols)
 
-			// Prepare insert statement for destination
-			insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
-				destinationInfo[1],
-				getSQLColumns(destinationFields),
-				getDataForColumns(sourceFields, data),
-			)
+		// Prepare insert statement for destination
+		insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+			destinationInfo[1],
+			getSQLColumns(destinationFields),
+			getDataForColumns(sourceFields, data),
+		)
 
-			fmt.Println(insertSQL)
+		destinationDB, err := connectToDatabase("../etls/data/" + destination.Connection["filepath"])
 
-			destinationDB, err := connectToDatabase("../etls/data/" + destination.Connection["filepath"])
+		if err != nil {
+			log.Fatalf("Failed to connect to destination: %v", err)
+		}
 
-			if err != nil {
-				log.Fatalf("Failed to connect to destination: %v", err)
-			}
+		defer destinationDB.Close()
 
-			defer destinationDB.Close()
+		_, err = destinationDB.Exec(insertSQL)
 
-			_, err = destinationDB.Exec(insertSQL)
-
-			if err != nil {
-				log.Fatalf("Failed to insert: %v", err)
-			}
+		if err != nil {
+			log.Fatalf("Failed to insert: %v", err)
 		}
 	}
 }
