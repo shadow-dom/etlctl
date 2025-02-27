@@ -1,14 +1,15 @@
 sources:
   - name: "pizza_db"
-    type: "sqlite"
+    type: "sqlite3"
     connection:
-      filepath: "pizza.db"
+      filepath: "../etls/data/pizza.db"
+    query: "SELECT name, toppings FROM pizza;"
 
-destinations:
+targets:
   - name: "delivery_db"
-    type: "sqlite"
+    type: "sqlite3"
     connection:
-      filepath: "delivery.db"
+      filepath: "../etls/data/delivery.db"
 
 pipelines:
   - source: "pizza_db.pizza"
