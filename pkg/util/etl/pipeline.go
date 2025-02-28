@@ -9,9 +9,10 @@ type FieldMapping struct {
 }
 
 type Pipeline struct {
-	Source string         `yaml:"source"`
-	Target string         `yaml:"target"`
-	Fields []FieldMapping `yaml:"fields"`
+	Sources []string       `yaml:"sources"`
+	Target  string         `yaml:"target"`
+	Fields  []FieldMapping `yaml:"fields"`
+	Query   string         `yaml:"query,omitempty"`
 }
 
 func (pipeline *Pipeline) GetFields() ([]string, []string) {
@@ -24,16 +25,6 @@ func (pipeline *Pipeline) GetFields() ([]string, []string) {
 	}
 
 	return sourceFields, targetFields
-}
-
-func (pipeline *Pipeline) GetSourceInfo() (string, string) {
-	info := strings.Split(pipeline.Source, ".")
-
-	if len(info) > 1 {
-		return info[0], info[1]
-	}
-
-	return info[0], ""
 }
 
 func (pipeline *Pipeline) GetTargetInfo() (string, string) {

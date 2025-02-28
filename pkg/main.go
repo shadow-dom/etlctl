@@ -11,5 +11,5 @@ import (
 
 func main() {
 	// cmd.Execute()
-	etl.Run("example")
+	etl.Run("multiple-pizza-shops")
 }

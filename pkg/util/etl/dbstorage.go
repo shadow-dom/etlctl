@@ -15,7 +15,7 @@ type DBStorage struct {
 	Query      string            `yaml:"query"`
 }
 
-func (dbs *DBStorage) generateDSN() (string, error) {
+func (dbs *DBStorage) getDSN() (string, error) {
 	switch dbs.Type {
 	case "sqlserver":
 		user, ok := dbs.Connection["user"]
@@ -36,7 +36,7 @@ func (dbs *DBStorage) generateDSN() (string, error) {
 }
 
 func (dbs *DBStorage) Connect() (*sql.DB, error) {
-	dsn, err := dbs.generateDSN()
+	dsn, err := dbs.getDSN()
 
 	if err != nil {
 		return nil, err

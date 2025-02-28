@@ -1,0 +1,32 @@
+sources:
+  - name: "pizza_db"
+    type: "sqlite3"
+    connection:
+      filepath: "../etls/data/pizza.db"
+  - name: "pizza_2_db"
+    type: "sqlite3"
+    connection:
+      filepath: "../etls/data/pizza_2.db"
+
+queries:
+  - name: "get_pizzas"
+    sql: |
+      SELECT name, toppings FROM pizza;
+
+targets:
+  - name: "delivery_db"
+    type: "sqlite3"
+    connection:
+      filepath: "../etls/data/delivery.db"
+
+pipelines:
+  - sources:
+      - "pizza_db"
+      - "pizza_2_db"
+    query: "get_pizzas"
+    target: "delivery_db.delivery"
+    fields:
+      - source: "name"
+        target: "name"
+      - source: "toppings"
+        target: "toppings"
