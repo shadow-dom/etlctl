@@ -1,29 +1,11 @@
 package etl
 
 import (
-	"fmt"
 	"log"
-	"strings"
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 )
-
-func getDataForColumns(fields []string, data []map[string]string) string {
-	results := make([]string, 0, len(data))
-
-	for _, row := range data {
-		rowValues := make([]string, 0, len(fields))
-
-		for _, field := range fields {
-			rowValues = append(rowValues, fmt.Sprintf("'%s'", row[field]))
-		}
-
-		results = append(results, fmt.Sprintf("(%s)", strings.Join(rowValues, ", ")))
-	}
-
-	return strings.Join(results, ", ")
-}
 
 func Run(name string) {
 	etl, err := CreateETL(name + ".yaml")
@@ -33,8 +15,6 @@ func Run(name string) {
 	}
 
 	for _, pipeline := range etl.Pipelines {
-		sourceFields, targetFields := pipeline.GetFields()
-
 		data := make([]map[string]string, 0)
 
 		var mu sync.Mutex
@@ -55,37 +35,6 @@ func Run(name string) {
 
 		wg.Wait()
 
-		targetName, targetTable := pipeline.GetTargetInfo()
-
-		fmt.Printf("Writing data to target %s...\n", targetName)
-
-		// Prepare insert statement for target
-		insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
-			targetTable,
-			strings.Join(targetFields, ", "),
-			getDataForColumns(sourceFields, data),
-		)
-
-		target, err := etl.GetTarget(targetName)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		targetDB, err := target.Connect()
-
-		if err != nil {
-			log.Fatalf("Failed to connect to target: %v", err)
-		}
-
-		defer targetDB.Close()
-
-		_, err = targetDB.Exec(insertSQL)
-
-		if err != nil {
-			log.Fatalf("Failed to insert: %v", err)
-		}
-
-		fmt.Println("DONE!")
+		etl.Load(pipeline, data)
 	}
 }

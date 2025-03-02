@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -44,6 +45,22 @@ func getDBStorage(name string, storages []DBStorage) (*DBStorage, error) {
 	response := fmt.Sprintf("invalid data storage requested: %s", name)
 
 	return nil, errors.New(response)
+}
+
+func getDataForColumns(fields []string, data []map[string]string) string {
+	results := make([]string, 0, len(data))
+
+	for _, row := range data {
+		rowValues := make([]string, 0, len(fields))
+
+		for _, field := range fields {
+			rowValues = append(rowValues, fmt.Sprintf("'%s'", row[field]))
+		}
+
+		results = append(results, fmt.Sprintf("(%s)", strings.Join(rowValues, ", ")))
+	}
+
+	return strings.Join(results, ", ")
 }
 
 func CreateETL(filePath string) (*ETL, error) {
@@ -134,4 +151,40 @@ func (etl *ETL) Extract(sourceName string, queryName string) []map[string]string
 	fmt.Println("DONE!")
 
 	return data
+}
+
+func (etl *ETL) Load(pipeline Pipeline, data []map[string]string) error {
+	sourceFields, targetFields := pipeline.GetFields()
+	targetName, targetTable := pipeline.GetTargetInfo()
+
+	fmt.Printf("Writing data to target %s...\n", targetName)
+
+	// Prepare insert statement for target
+	insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+		targetTable,
+		strings.Join(targetFields, ", "),
+		getDataForColumns(sourceFields, data),
+	)
+
+	target, err := etl.GetTarget(targetName)
+
+	if err != nil {
+		return err
+	}
+
+	targetDB, err := target.Connect()
+
+	if err != nil {
+		return err
+	}
+
+	defer targetDB.Close()
+
+	_, err = targetDB.Exec(insertSQL)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
