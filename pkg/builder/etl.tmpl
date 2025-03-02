@@ -1,0 +1,55 @@
+package main
+
+import (
+    "fmt"
+	"shadow-dom/etlctl/pkg/util/etl"
+)
+
+func main() {
+	var etl etl.ETL = etl.ETL {
+        Sources: []Source{
+			{{range .Sources}}
+			{
+				Name: "{{.Name}}",
+				Type: "{{.Type}}",
+				Connection: struct{ Filepath string }{
+					Filepath: "{{.Connection.Filepath}}",
+				},
+			},
+			{{end}}
+		},
+		Queries: []etl.Query{
+			{{range .Queries}}
+			{
+				Name: "{{.Name}}",
+				SQL: "`{{.SQL}}`",
+			},
+			{{end}}
+		},
+		Targets: []etl.Target{
+			{{range .Targets}}
+			{
+				Name: "{{.Name}}",
+				Type: "{{.Type}}",
+				Connection: struct{ Filepath string }{
+					Filepath: "{{.Connection.Filepath}}",
+				},
+			},
+			{{end}}
+		},
+		Pipelines: []etl.Pipeline{
+			{{range .Pipelines}}
+			{
+				Sources: []string{ {{join .Sources ", "}} },
+				Query:   "{{.Query}}",
+				Target:  "{{.Target}}",
+				Fields: []etl.FieldMapping{
+					{{range .Fields}}{Source: "{{.Source}}", Target: "{{.Target}}"},{{end}}
+				},
+			},
+			{{end}}
+		},
+	}
+
+    fmt.Println(etl)
+}
