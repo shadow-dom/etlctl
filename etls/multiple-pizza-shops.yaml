@@ -7,18 +7,15 @@ sources:
     type: "sqlite3"
     connection:
       filepath: "../etls/data/pizza_2.db"
-
 queries:
   - name: "get_pizzas"
     sql: |
       SELECT name, toppings FROM pizza;
-
 targets:
   - name: "delivery_db"
     type: "sqlite3"
     connection:
       filepath: "../etls/data/delivery.db"
-
 pipelines:
   - sources:
       - "pizza_db"

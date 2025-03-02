@@ -7,14 +7,12 @@ import (
 
 func main() {
 	var etl etl.ETL = etl.ETL {
-        Sources: []Source{
+        Sources: []etl.DBStorage{
 			{{range .Sources}}
 			{
 				Name: "{{.Name}}",
 				Type: "{{.Type}}",
-				Connection: struct{ Filepath string }{
-					Filepath: "{{.Connection.Filepath}}",
-				},
+				Connection: map[string]string{"filepath": `{{index .Connection "filepath"}}`},
 			},
 			{{end}}
 		},
@@ -22,18 +20,16 @@ func main() {
 			{{range .Queries}}
 			{
 				Name: "{{.Name}}",
-				SQL: "`{{.SQL}}`",
+				SQL: `{{.SQL}}`,
 			},
 			{{end}}
 		},
-		Targets: []etl.Target{
+		Targets: []etl.DBStorage{
 			{{range .Targets}}
 			{
 				Name: "{{.Name}}",
 				Type: "{{.Type}}",
-				Connection: struct{ Filepath string }{
-					Filepath: "{{.Connection.Filepath}}",
-				},
+				Connection: map[string]string{"filepath": `{{index .Connection "filepath"}}`},
 			},
 			{{end}}
 		},

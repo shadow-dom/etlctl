@@ -7,22 +7,18 @@ import (
 
 func main() {
 	var etl etl.ETL = etl.ETL {
-        Sources: []Source{
+        Sources: []etl.DBStorage{
 			
 			{
 				Name: "pizza_db",
 				Type: "sqlite3",
-				Connection: struct{ Filepath string }{
-					Filepath: "<no value>",
-				},
+				Connection: map[string]string{"filepath": `../etls/data/pizza.db`},
 			},
 			
 			{
 				Name: "pizza_2_db",
 				Type: "sqlite3",
-				Connection: struct{ Filepath string }{
-					Filepath: "<no value>",
-				},
+				Connection: map[string]string{"filepath": `../etls/data/pizza_2.db`},
 			},
 			
 		},
@@ -30,19 +26,17 @@ func main() {
 			
 			{
 				Name: "get_pizzas",
-				SQL: "`SELECT name, toppings FROM pizza;
-`",
+				SQL: `SELECT name, toppings FROM pizza;
+`,
 			},
 			
 		},
-		Targets: []etl.Target{
+		Targets: []etl.DBStorage{
 			
 			{
 				Name: "delivery_db",
 				Type: "sqlite3",
-				Connection: struct{ Filepath string }{
-					Filepath: "<no value>",
-				},
+				Connection: map[string]string{"filepath": `../etls/data/delivery.db`},
 			},
 			
 		},
