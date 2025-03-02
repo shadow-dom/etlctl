@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -187,4 +188,30 @@ func (etl *ETL) Load(pipeline Pipeline, data []map[string]string) error {
 	}
 
 	return nil
+}
+
+func (etl *ETL) Run() {
+	for _, pipeline := range etl.Pipelines {
+		data := make([]map[string]string, 0)
+
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+
+		for _, sourceName := range pipeline.Sources {
+			wg.Add(1)
+			go func(source string) {
+				defer wg.Done()
+
+				result := etl.Extract(source, pipeline.Query)
+
+				mu.Lock()
+				data = append(data, result...)
+				mu.Unlock()
+			}(sourceName)
+		}
+
+		wg.Wait()
+
+		etl.Load(pipeline, data)
+	}
 }

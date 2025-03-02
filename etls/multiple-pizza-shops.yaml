@@ -2,11 +2,11 @@ sources:
   - name: "pizza_db"
     type: "sqlite3"
     connection:
-      filepath: "../etls/data/pizza.db"
+      filepath: "~/apps/projects/etlctl/etls/data/pizza.db"
   - name: "pizza_2_db"
     type: "sqlite3"
     connection:
-      filepath: "../etls/data/pizza_2.db"
+      filepath: "~/apps/projects/etlctl/etls/data/pizza_2.db"
 queries:
   - name: "get_pizzas"
     sql: |
@@ -15,7 +15,7 @@ targets:
   - name: "delivery_db"
     type: "sqlite3"
     connection:
-      filepath: "../etls/data/delivery.db"
+      filepath: "~/apps/projects/etlctl/etls/data/delivery.db"
 pipelines:
   - sources:
       - "pizza_db"

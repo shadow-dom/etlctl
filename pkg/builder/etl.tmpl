@@ -1,37 +1,33 @@
 package main
 
 import (
-    "fmt"
 	"shadow-dom/etlctl/pkg/util/etl"
 )
 
 func main() {
-	var etl etl.ETL = etl.ETL {
+	var etl etl.ETL = etl.ETL{
         Sources: []etl.DBStorage{
 			{{range .Sources}}
 			{
-				Name: "{{.Name}}",
-				Type: "{{.Type}}",
+				Name:       "{{.Name}}",
+				Type:       "{{.Type}}",
 				Connection: map[string]string{"filepath": `{{index .Connection "filepath"}}`},
-			},
-			{{end}}
+			},{{end}}
 		},
 		Queries: []etl.Query{
 			{{range .Queries}}
 			{
 				Name: "{{.Name}}",
 				SQL: `{{.SQL}}`,
-			},
-			{{end}}
+			},{{end}}
 		},
 		Targets: []etl.DBStorage{
 			{{range .Targets}}
 			{
-				Name: "{{.Name}}",
-				Type: "{{.Type}}",
+				Name:       "{{.Name}}",
+				Type:       "{{.Type}}",
 				Connection: map[string]string{"filepath": `{{index .Connection "filepath"}}`},
-			},
-			{{end}}
+			},{{end}}
 		},
 		Pipelines: []etl.Pipeline{
 			{{range .Pipelines}}
@@ -40,12 +36,11 @@ func main() {
 				Query:   "{{.Query}}",
 				Target:  "{{.Target}}",
 				Fields: []etl.FieldMapping{
-					{{range .Fields}}{Source: "{{.Source}}", Target: "{{.Target}}"},{{end}}
+					{{range .Fields}}{Source: "{{.Source}}", Target: "{{.Target}}"}, {{end}}
 				},
-			},
-			{{end}}
+			},{{end}}
 		},
 	}
 
-    fmt.Println(etl)
+    etl.Run()
 }

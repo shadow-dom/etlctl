@@ -3,6 +3,8 @@ package etl
 import (
 	"database/sql"
 	"fmt"
+	"os/user"
+	"path/filepath"
 
 	_ "github.com/mattn/go-sqlite3"
 	_ "github.com/microsoft/go-mssqldb"
@@ -13,6 +15,17 @@ type DBStorage struct {
 	Type       string            `yaml:"type"`
 	Connection map[string]string `yaml:"connection"`
 	Query      string            `yaml:"query"`
+}
+
+func expandPath(path string) (string, error) {
+	if path[:2] == "~/" {
+		usr, err := user.Current()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(usr.HomeDir, path[2:]), nil
+	}
+	return path, nil
 }
 
 func (dbs *DBStorage) getDSN() (string, error) {
@@ -29,7 +42,14 @@ func (dbs *DBStorage) getDSN() (string, error) {
 		return fmt.Sprintf("sqlserver://@%s:%s?database=%s&trusted_connection=yes",
 			dbs.Connection["host"], dbs.Connection["port"], dbs.Connection["database"]), nil
 	case "sqlite3":
-		return dbs.Connection["filepath"], nil
+		path, err := expandPath(dbs.Connection["filepath"])
+
+		if err != nil {
+			fmt.Println("Error expanding file path:", err)
+			return "", err
+		}
+
+		return path, nil
 	default:
 		return "", fmt.Errorf("unsupported database type: %s", dbs.Type)
 	}
