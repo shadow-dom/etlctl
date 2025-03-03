@@ -6,8 +6,8 @@ import (
 
 func main() {
 	var etl etl.ETL = etl.ETL{
-        Sources: []etl.DBStorage{
-			
+		Sources: []etl.DBStorage{
+
 			{
 				Name:       "pizza_db",
 				Type:       "sqlite3",
@@ -20,15 +20,14 @@ func main() {
 			},
 		},
 		Queries: []etl.Query{
-			
+
 			{
 				Name: "get_pizzas",
-				SQL: `SELECT name, toppings FROM pizza;
-`,
+				SQL:  `SELECT name, toppings FROM pizza;`,
 			},
 		},
 		Targets: []etl.DBStorage{
-			
+
 			{
 				Name:       "delivery_db",
 				Type:       "sqlite3",
@@ -36,17 +35,17 @@ func main() {
 			},
 		},
 		Pipelines: []etl.Pipeline{
-			
+
 			{
-				Sources: []string{ "pizza_db", "pizza_2_db" },
+				Sources: []string{"pizza_db", "pizza_2_db"},
 				Query:   "get_pizzas",
 				Target:  "delivery_db.delivery",
 				Fields: []etl.FieldMapping{
-					{Source: "name", Target: "name"}, {Source: "toppings", Target: "toppings"}, 
+					{Source: "name", Target: "name"}, {Source: "toppings", Target: "toppings"},
 				},
 			},
 		},
 	}
 
-    etl.Run()
+	etl.Run()
 }
