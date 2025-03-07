@@ -1,7 +1,6 @@
 package etl
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,8 +116,6 @@ func (pipeline *Pipeline) GetTrackingState(source string) (string, string) {
 func (pipeline *Pipeline) UpdateTrackingState(source string, lastRecord map[string]string) {
 	trackingField, _ := pipeline.GetTrackingState(source)
 
-	fmt.Println((lastRecord))
-
 	if lastVal, exists := lastRecord[trackingField]; exists {
 		pipeline.State.Sources[source] = SourceTracking{
 			Field:     trackingField,
@@ -126,5 +123,3 @@ func (pipeline *Pipeline) UpdateTrackingState(source string, lastRecord map[stri
 		}
 	}
 }
-
-func (pipeline *Pipeline) UpdateQueryWithState() {}

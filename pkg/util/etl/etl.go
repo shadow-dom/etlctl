@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -88,7 +90,77 @@ func (etl *ETL) GetTarget(name string) (*DBStorage, error) {
 	return getDBStorage(name, etl.Targets)
 }
 
-func (etl *ETL) Extract(sourceName string, queryName string) []map[string]string {
+func updateQueryWithTracking(baseQuery, trackingField, lastValue string) string {
+	if lastValue == "" {
+		return baseQuery
+	}
+
+	// Try parsing lastValue as an integer (ID-based tracking)
+	isID := true
+	if _, err := strconv.Atoi(lastValue); err != nil {
+		isID = false
+	}
+
+	// Format the condition properly
+	var condition string
+	if isID {
+		condition = fmt.Sprintf("%s > %s", trackingField, lastValue)
+	} else {
+		condition = fmt.Sprintf("%s > '%s'", trackingField, lastValue)
+	}
+
+	// Check if query already has a WHERE clause
+	whereRegex := regexp.MustCompile(`(?i)\bWHERE\b`)
+	if whereRegex.MatchString(baseQuery) {
+		// Append with AND
+		return whereRegex.ReplaceAllString(baseQuery, "WHERE "+condition+" AND")
+	}
+
+	// Otherwise, add WHERE clause
+	return baseQuery + " WHERE " + condition
+}
+
+func (etl *ETL) InjectSourceQueryWithState(source string, query string, pipeline Pipeline) string {
+	trackingField, lastValue := pipeline.GetTrackingState(source)
+	condition := fmt.Sprintf("%s > '%s'", trackingField, lastValue)
+	whereRegex := regexp.MustCompile(`(?i)\bWHERE\b`)
+	if whereRegex.MatchString(pipeline.Query) {
+		return whereRegex.ReplaceAllString(pipeline.Query, "WHERE "+condition+" AND")
+	}
+
+	// Otherwise, add WHERE clause
+	return query + " WHERE " + condition
+}
+
+func UpdateQueryWithState(pipeline Pipeline, source string, query string) (string, error) {
+	query = strings.TrimSpace(query)
+	query = strings.TrimSuffix(query, ";")
+
+	if state, ok := pipeline.State.Sources[source]; ok {
+		if state.Field == "" {
+			return query, errors.New("invalid state: empty field")
+		}
+
+		if state.LastValue == "" {
+			return query, errors.New("invalid state: empty lastValue")
+		}
+
+		condition := fmt.Sprintf("%s > '%s'", state.Field, state.LastValue)
+
+		whereRegex := regexp.MustCompile(`(?i)\bWHERE\b`)
+		if whereRegex.MatchString(query) {
+			return whereRegex.ReplaceAllString(pipeline.Query, "WHERE "+condition+" AND"), nil
+		}
+
+		return query + " WHERE " + condition, nil
+	}
+
+	return query, fmt.Errorf("missing state: could not load state for source (%s)", source)
+}
+
+func (etl *ETL) Extract(sourceName string, pipeline Pipeline) []map[string]string {
+	pipeline.GetState()
+
 	fmt.Printf("Pulling data from %s...\n", sourceName)
 
 	source, err := etl.GetSource(sourceName)
@@ -97,7 +169,15 @@ func (etl *ETL) Extract(sourceName string, queryName string) []map[string]string
 		log.Fatal(err)
 	}
 
-	query, err := getQueryByName(queryName, etl.Queries)
+	query, err := getQueryByName(pipeline.Query, etl.Queries)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	query, err = UpdateQueryWithState(pipeline, sourceName, query)
+
+	fmt.Println(query)
 
 	if err != nil {
 		log.Fatal(err)
@@ -193,8 +273,6 @@ func (etl *ETL) Load(pipeline Pipeline, data []map[string]string) error {
 
 func (etl *ETL) Run() {
 	for _, pipeline := range etl.Pipelines {
-		pipeline.GetState()
-
 		data := make([]map[string]string, 0)
 
 		var mu sync.Mutex
@@ -205,10 +283,14 @@ func (etl *ETL) Run() {
 			go func(source string) {
 				defer wg.Done()
 
-				result := etl.Extract(source, pipeline.Query)
+				result := etl.Extract(source, pipeline)
 
 				mu.Lock()
-				pipeline.UpdateTrackingState(source, result[len(result)-1])
+
+				if len(result) > 0 {
+					pipeline.UpdateTrackingState(source, result[len(result)-1])
+				}
+
 				data = append(data, result...)
 				mu.Unlock()
 			}(sourceName)
