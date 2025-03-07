@@ -1,0 +1,12 @@
+state:
+  pipeline:
+    pizza_orders:
+      sources:
+        pizza_db:
+          tracking:
+            field: "id"
+            last_value: 2
+        pizza_2_db:
+          tracking:
+            field: "id"
+            last_value: 2

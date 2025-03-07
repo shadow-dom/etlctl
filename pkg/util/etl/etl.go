@@ -22,6 +22,7 @@ type ETL struct {
 	Targets   []DBStorage `yaml:"targets"`
 	Pipelines []Pipeline  `yaml:"pipelines"`
 	Queries   []Query     `yaml:"queries"`
+	Name      string      `yaml:"name"`
 }
 
 func getQueryByName(name string, queries []Query) (string, error) {
@@ -192,6 +193,8 @@ func (etl *ETL) Load(pipeline Pipeline, data []map[string]string) error {
 
 func (etl *ETL) Run() {
 	for _, pipeline := range etl.Pipelines {
+		pipeline.GetState()
+
 		data := make([]map[string]string, 0)
 
 		var mu sync.Mutex
@@ -205,6 +208,7 @@ func (etl *ETL) Run() {
 				result := etl.Extract(source, pipeline.Query)
 
 				mu.Lock()
+				pipeline.UpdateTrackingState(source, result[len(result)-1])
 				data = append(data, result...)
 				mu.Unlock()
 			}(sourceName)
@@ -213,5 +217,6 @@ func (etl *ETL) Run() {
 		wg.Wait()
 
 		etl.Load(pipeline, data)
+		pipeline.SaveState()
 	}
 }

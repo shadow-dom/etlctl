@@ -1,3 +1,4 @@
+name: "multiple-pizza-shops"
 sources:
   - name: "pizza_db"
     type: "sqlite3"
@@ -10,14 +11,15 @@ sources:
 queries:
   - name: "get_pizzas"
     sql: |
-      SELECT name, toppings FROM pizza;
+      SELECT id, name, toppings FROM pizza;
 targets:
   - name: "delivery_db"
     type: "sqlite3"
     connection:
       filepath: "~/apps/projects/etlctl/etls/data/delivery.db"
 pipelines:
-  - sources:
+  - name: "pizza_orders"
+    sources:
       - "pizza_db"
       - "pizza_2_db"
     query: "get_pizzas"
@@ -27,3 +29,6 @@ pipelines:
         target: "name"
       - source: "toppings"
         target: "toppings"
+    tracking:
+      field: "id"
+      storage_type: file
