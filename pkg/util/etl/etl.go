@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -88,36 +87,6 @@ func (etl *ETL) GetSource(name string) (*DBStorage, error) {
 
 func (etl *ETL) GetTarget(name string) (*DBStorage, error) {
 	return getDBStorage(name, etl.Targets)
-}
-
-func updateQueryWithTracking(baseQuery, trackingField, lastValue string) string {
-	if lastValue == "" {
-		return baseQuery
-	}
-
-	// Try parsing lastValue as an integer (ID-based tracking)
-	isID := true
-	if _, err := strconv.Atoi(lastValue); err != nil {
-		isID = false
-	}
-
-	// Format the condition properly
-	var condition string
-	if isID {
-		condition = fmt.Sprintf("%s > %s", trackingField, lastValue)
-	} else {
-		condition = fmt.Sprintf("%s > '%s'", trackingField, lastValue)
-	}
-
-	// Check if query already has a WHERE clause
-	whereRegex := regexp.MustCompile(`(?i)\bWHERE\b`)
-	if whereRegex.MatchString(baseQuery) {
-		// Append with AND
-		return whereRegex.ReplaceAllString(baseQuery, "WHERE "+condition+" AND")
-	}
-
-	// Otherwise, add WHERE clause
-	return baseQuery + " WHERE " + condition
 }
 
 func (etl *ETL) InjectSourceQueryWithState(source string, query string, pipeline Pipeline) string {
