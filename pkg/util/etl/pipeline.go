@@ -61,7 +61,7 @@ func (pipeline *Pipeline) GetTargetInfo() (string, string) {
 	return info[0], ""
 }
 
-func (pipeline *Pipeline) GetState() error {
+func (pipeline *Pipeline) InitState() error {
 	file := filepath.Join("../etls", "state", pipeline.Name+"_state.yaml")
 
 	if _, err := os.Stat(file); err == nil {
@@ -115,6 +115,10 @@ func (pipeline *Pipeline) GetTrackingState(source string) (string, string) {
 
 func (pipeline *Pipeline) UpdateTrackingState(source string, lastRecord map[string]string) {
 	trackingField, _ := pipeline.GetTrackingState(source)
+
+	if pipeline.State.Sources == nil {
+		pipeline.State.Sources = make(map[string]SourceTracking)
+	}
 
 	if lastVal, exists := lastRecord[trackingField]; exists {
 		pipeline.State.Sources[source] = SourceTracking{

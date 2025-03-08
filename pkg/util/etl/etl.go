@@ -101,17 +101,13 @@ func (etl *ETL) InjectSourceQueryWithState(source string, query string, pipeline
 	return query + " WHERE " + condition
 }
 
-func UpdateQueryWithState(pipeline Pipeline, source string, query string) (string, error) {
+func updateQueryWithState(pipeline Pipeline, source string, query string) (string, error) {
 	query = strings.TrimSpace(query)
 	query = strings.TrimSuffix(query, ";")
 
 	if state, ok := pipeline.State.Sources[source]; ok {
-		if state.Field == "" {
-			return query, errors.New("invalid state: empty field")
-		}
-
-		if state.LastValue == "" {
-			return query, errors.New("invalid state: empty lastValue")
+		if state.Field == "" || state.LastValue == "" {
+			return query, nil
 		}
 
 		condition := fmt.Sprintf("%s > '%s'", state.Field, state.LastValue)
@@ -127,8 +123,12 @@ func UpdateQueryWithState(pipeline Pipeline, source string, query string) (strin
 	return query, fmt.Errorf("missing state: could not load state for source (%s)", source)
 }
 
-func (etl *ETL) Extract(sourceName string, pipeline Pipeline) []map[string]string {
-	pipeline.GetState()
+func (etl *ETL) Extract(sourceName string, pipeline *Pipeline) []map[string]string {
+	err := pipeline.InitState()
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Printf("Pulling data from %s...\n", sourceName)
 
@@ -144,7 +144,7 @@ func (etl *ETL) Extract(sourceName string, pipeline Pipeline) []map[string]strin
 		log.Fatal(err)
 	}
 
-	query, err = UpdateQueryWithState(pipeline, sourceName, query)
+	query, err = updateQueryWithState(*pipeline, sourceName, query)
 
 	fmt.Println(query)
 
@@ -252,7 +252,7 @@ func (etl *ETL) Run() {
 			go func(source string) {
 				defer wg.Done()
 
-				result := etl.Extract(source, pipeline)
+				result := etl.Extract(source, &pipeline)
 
 				mu.Lock()
 
