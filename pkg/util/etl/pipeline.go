@@ -36,6 +36,7 @@ type Pipeline struct {
 	Query        string         `yaml:"query,omitempty"`
 	TrackingSpec TrackingSpec   `yaml:"tracking"`
 	Name         string         `yaml:"name"`
+	UniqueFields []string       `yaml:"uniqueFields,omitempty"`
 	State        State
 }
 

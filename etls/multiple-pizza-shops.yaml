@@ -29,6 +29,9 @@ pipelines:
         target: "name"
       - source: "toppings"
         target: "toppings"
+    uniqueFields:
+      - "name"
+      - "toppings"
     tracking:
       field: "id"
       storage_type: file

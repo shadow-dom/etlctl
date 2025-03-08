@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -99,6 +100,42 @@ func (etl *ETL) InjectSourceQueryWithState(source string, query string, pipeline
 	}
 
 	return query + " WHERE " + condition
+}
+
+func track(msg string) (string, time.Time) {
+	return msg, time.Now()
+}
+
+func duration(msg string, start time.Time) {
+	log.Printf("%v: %v\n", msg, time.Since(start))
+}
+
+func (etl *ETL) Deduplicate(uniqueFields []string, data []map[string]string) *[]map[string]string {
+	defer duration(track("dedup"))
+
+	observed := make(map[string]bool)
+
+	var results []map[string]string
+
+	var sb strings.Builder
+
+	for _, record := range data {
+		for _, field := range uniqueFields {
+			if value, exists := record[field]; exists {
+				sb.WriteString(value)
+				sb.WriteString("|")
+			}
+		}
+
+		if !observed[sb.String()] {
+			observed[sb.String()] = true
+			results = append(results, record)
+		}
+
+		sb.Reset()
+	}
+
+	return &results
 }
 
 func updateQueryWithState(pipeline Pipeline, source string, query string) (string, error) {
@@ -267,7 +304,12 @@ func (etl *ETL) Run() {
 
 		wg.Wait()
 
-		etl.Load(pipeline, data)
+		if len(pipeline.UniqueFields) > 0 && len(data) > 0 {
+			etl.Load(pipeline, *etl.Deduplicate(pipeline.UniqueFields, data))
+		} else {
+			etl.Load(pipeline, data)
+		}
+
 		pipeline.SaveState()
 	}
 }
