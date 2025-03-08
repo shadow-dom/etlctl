@@ -93,11 +93,11 @@ func (etl *ETL) InjectSourceQueryWithState(source string, query string, pipeline
 	trackingField, lastValue := pipeline.GetTrackingState(source)
 	condition := fmt.Sprintf("%s > '%s'", trackingField, lastValue)
 	whereRegex := regexp.MustCompile(`(?i)\bWHERE\b`)
+
 	if whereRegex.MatchString(pipeline.Query) {
 		return whereRegex.ReplaceAllString(pipeline.Query, "WHERE "+condition+" AND")
 	}
 
-	// Otherwise, add WHERE clause
 	return query + " WHERE " + condition
 }
 
