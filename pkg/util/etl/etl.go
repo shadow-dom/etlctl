@@ -110,7 +110,7 @@ func duration(msg string, start time.Time) {
 	log.Printf("%v: %v\n", msg, time.Since(start))
 }
 
-func (etl *ETL) Deduplicate(uniqueFields []string, data []map[string]string) *[]map[string]string {
+func (etl *ETL) Deduplicate(uniqueFields []string, data []map[string]string) []map[string]string {
 	defer duration(track("dedup"))
 
 	observed := make(map[string]bool)
@@ -135,7 +135,7 @@ func (etl *ETL) Deduplicate(uniqueFields []string, data []map[string]string) *[]
 		sb.Reset()
 	}
 
-	return &results
+	return results
 }
 
 func updateQueryWithState(pipeline Pipeline, source string, query string) (string, error) {
@@ -305,7 +305,7 @@ func (etl *ETL) Run() {
 		wg.Wait()
 
 		if len(pipeline.UniqueFields) > 0 && len(data) > 0 {
-			etl.Load(pipeline, *etl.Deduplicate(pipeline.UniqueFields, data))
+			etl.Load(pipeline, etl.Deduplicate(pipeline.UniqueFields, data))
 		} else {
 			etl.Load(pipeline, data)
 		}

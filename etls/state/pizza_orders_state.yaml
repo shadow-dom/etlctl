@@ -1,0 +1,8 @@
+sources:
+    pizza_2_db:
+        field: id
+        last_value: "50962"
+    pizza_db:
+        field: id
+        last_value: "3"
+storage_type: file
