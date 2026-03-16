@@ -154,11 +154,8 @@ func (r *RunnerService) TestETL(name string, dryRun bool, resetState bool) (*api
 			if dryRun {
 				step.Sample = sampleRows(allData, maxSampleRows)
 			} else if len(allData) > 0 {
-				// Create a temporary single-target pipeline for loading
-				loadPipeline := pipeline
-				loadPipeline.Target = targetRef
 				start := time.Now()
-				err := e.Load(loadPipeline, allData)
+				err := e.Load(pipeline, targetRef, allData)
 				step.DurationMs = time.Since(start).Milliseconds()
 				if err != nil {
 					step.Error = err.Error()

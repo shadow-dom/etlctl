@@ -34,6 +34,19 @@ type Listener interface {
 	IsListener() bool
 }
 
+// Acknowledger is optionally implemented by Sources that support
+// deferred message acknowledgement (e.g. message queues).
+type Acknowledger interface {
+	AckLast() error
+	NackLast() error
+}
+
+// Aliver is optionally implemented by Sources that can report
+// whether their underlying connection is still alive.
+type Aliver interface {
+	IsAlive() bool
+}
+
 // SchemaIntrospector is optionally implemented by Sources/Targets
 // that can report their schema (tables + columns).
 type SchemaIntrospector interface {

@@ -19,8 +19,8 @@ export interface TrackingSpec {
 export interface PipelineConfig {
   name: string;
   sources: string[];
-  target: string;
-  targets?: string[];
+  target?: string; // legacy, read-only for backwards compat
+  targets: string[];
   fields: FieldMapping[];
   query?: string;
   functions?: string[];

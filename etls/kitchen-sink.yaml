@@ -45,7 +45,8 @@ targets:
 pipelines:
     - sources:
         - csv_employees
-      target: emp_db.employees
+      targets:
+        - emp_db.employees
       fields:
         - source: id
           target: id
@@ -66,7 +67,8 @@ pipelines:
         storage_type: ""
     - sources:
         - json_products
-      target: products_csv
+      targets:
+        - products_csv
       fields:
         - source: sku
           target: product_sku
@@ -86,7 +88,8 @@ pipelines:
         storage_type: ""
     - sources:
         - sqlite_orders
-      target: orders_json
+      targets:
+        - orders_json
       fields: []
       query: all_orders
       tracking:
@@ -98,7 +101,8 @@ pipelines:
         storage_type: ""
     - sources:
         - api_items
-      target: emp_db_api.api_items
+      targets:
+        - emp_db_api.api_items
       fields:
         - source: id
           target: item_id
@@ -116,7 +120,8 @@ pipelines:
         storage_type: ""
     - sources:
         - csv_employees
-      target: domains_json
+      targets:
+        - domains_json
       fields:
         - source: name
           target: name
@@ -135,7 +140,8 @@ pipelines:
         storage_type: ""
     - sources:
         - csv_employees
-      target: api_sink
+      targets:
+        - api_sink
       fields:
         - source: name
           target: employee_name

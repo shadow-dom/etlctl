@@ -18,7 +18,7 @@ targets:
 pipelines:
   - name: load_employees
     sources: [inline_employees]
-    target: employee_db.employees
+    targets: [employee_db.employees]
     fields:
       - { source: id, target: id }
       - { source: name, target: full_name, transform: "uppercase" }

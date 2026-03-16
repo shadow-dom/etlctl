@@ -88,15 +88,9 @@ export function parseToDag(etl: ETLConfig): { nodes: DAGNode[]; edges: DAGEdge[]
     });
   });
 
-  // Helper: collect all target names for a pipeline (supports singular + plural)
-  const getAllTargets = (p: { target?: string; targets?: string[] }): string[] => {
-    if (p.targets && p.targets.length > 0) {
-      return p.targets.map(t => t.split('.')[0]);
-    }
-    if (p.target) {
-      return [p.target.split('.')[0]];
-    }
-    return [];
+  // Helper: collect all target names for a pipeline
+  const getAllTargets = (p: { targets?: string[] }): string[] => {
+    return (p.targets || []).map(t => t.split('.')[0]);
   };
 
   // Create transform nodes and edges from pipelines

@@ -53,15 +53,9 @@ type Pipeline struct {
 	ConfigDir    string `yaml:"-"`
 }
 
-// GetAllTargets returns all targets for this pipeline (supports both single Target and multi Targets).
+// GetAllTargets returns all targets for this pipeline.
 func (pipeline *Pipeline) GetAllTargets() []string {
-	if len(pipeline.Targets) > 0 {
-		return pipeline.Targets
-	}
-	if pipeline.Target != "" {
-		return []string{pipeline.Target}
-	}
-	return nil
+	return pipeline.Targets
 }
 
 func (pipeline *Pipeline) stateDir() string {
@@ -83,8 +77,9 @@ func (pipeline *Pipeline) GetFields() ([]string, []string) {
 	return sourceFields, targetFields
 }
 
-func (pipeline *Pipeline) GetTargetInfo() (string, string) {
-	info := strings.Split(pipeline.Target, ".")
+// GetTargetInfo parses a target reference like "db.table" into name and table.
+func (pipeline *Pipeline) GetTargetInfo(targetRef string) (string, string) {
+	info := strings.Split(targetRef, ".")
 
 	if len(info) > 1 {
 		return info[0], info[1]

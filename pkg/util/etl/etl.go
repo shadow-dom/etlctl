@@ -139,6 +139,13 @@ func CreateETL(configDir string, name string) (*ETL, error) {
 
 	etl.ConfigDir = configDir
 
+	// Migrate legacy target -> targets
+	for i := range etl.Pipelines {
+		if len(etl.Pipelines[i].Targets) == 0 && etl.Pipelines[i].Target != "" {
+			etl.Pipelines[i].Targets = []string{etl.Pipelines[i].Target}
+		}
+	}
+
 	// Resolve connection references
 	resolveConnectionRefs(configDir, etl.Sources)
 	resolveConnectionRefs(configDir, etl.Targets)
@@ -356,8 +363,36 @@ func (etl *ETL) Extract(sourceName string, pipeline *Pipeline) ([]map[string]str
 	return data, nil
 }
 
-func (etl *ETL) Load(pipeline Pipeline, data []map[string]string) error {
-	targetName, targetTable := pipeline.GetTargetInfo()
+// ExtractFromSource extracts data using a pre-connected source (for persistent connections in Listen mode).
+func (etl *ETL) ExtractFromSource(source Source, sourceName string, pipeline *Pipeline) ([]map[string]string, error) {
+	if err := pipeline.InitState(); err != nil {
+		return nil, err
+	}
+
+	// Build query (DB sources use SQL, others may ignore it)
+	query := ""
+	var err error
+	if pipeline.Query != "" {
+		query, err = getQueryByName(pipeline.Query, etl.Queries)
+		if err != nil {
+			return nil, err
+		}
+		query, _ = updateQueryWithState(*pipeline, sourceName, query)
+	}
+
+	data, err := source.Extract(query)
+	if err != nil {
+		return nil, fmt.Errorf("extraction failed for source %s: %w", sourceName, err)
+	}
+
+	if len(data) > 0 {
+		fmt.Printf("Extracted %d rows from %s\n", len(data), sourceName)
+	}
+	return data, nil
+}
+
+func (etl *ETL) Load(pipeline Pipeline, targetRef string, data []map[string]string) error {
+	targetName, targetTable := pipeline.GetTargetInfo(targetRef)
 
 	fmt.Printf("Writing data to target %s...\n", targetName)
 
@@ -500,9 +535,7 @@ func (etl *ETL) Run() error {
 
 		// Load into all targets
 		for _, targetRef := range pipeline.GetAllTargets() {
-			loadPipeline := pipeline
-			loadPipeline.Target = targetRef
-			if err := etl.Load(loadPipeline, data); err != nil {
+			if err := etl.Load(pipeline, targetRef, data); err != nil {
 				return fmt.Errorf("load failed for pipeline %s target %s: %w", pipeline.Name, targetRef, err)
 			}
 		}
@@ -523,6 +556,51 @@ func (etl *ETL) Listen() error {
 	// Cache for non-listener source data (extracted once)
 	staticCache := make(map[string][]map[string]string)
 
+	// Persistent sources for listener-type sources (keyed by source name)
+	persistentSources := make(map[string]Source)
+	// Track which sources are listeners
+	isListenerSource := make(map[string]bool)
+
+	// Pre-create listener sources
+	for _, pipeline := range etl.Pipelines {
+		for _, sourceName := range pipeline.Sources {
+			if _, exists := persistentSources[sourceName]; exists {
+				continue
+			}
+
+			sc, err := etl.GetSource(sourceName)
+			if err != nil {
+				continue
+			}
+
+			s, err := NewSource(sc.Type, sc.Name, sc.Connection)
+			if err != nil {
+				continue
+			}
+
+			if _, ok := s.(Listener); ok {
+				if err := s.Connect(); err != nil {
+					log.Printf("Failed to connect persistent source %s: %v", sourceName, err)
+					s.Close()
+					continue
+				}
+				persistentSources[sourceName] = s
+				isListenerSource[sourceName] = true
+			} else {
+				s.Close()
+				isListenerSource[sourceName] = false
+			}
+		}
+	}
+
+	// Ensure persistent sources are closed on shutdown
+	defer func() {
+		for name, s := range persistentSources {
+			log.Printf("Closing persistent source %s", name)
+			s.Close()
+		}
+	}()
+
 	fmt.Println("Starting listener mode...")
 
 	for {
@@ -541,43 +619,63 @@ func (etl *ETL) Listen() error {
 			var wg sync.WaitGroup
 			var extractErrors []error
 
+			// Track which persistent sources were used for ACK/NACK
+			type sourceExtraction struct {
+				sourceName string
+				source     Source
+			}
+			var usedSources []sourceExtraction
+
 			for _, sourceName := range pipeline.Sources {
 				wg.Add(1)
 				go func(source string) {
 					defer wg.Done()
 
-					sc, err := etl.GetSource(source)
-					if err != nil {
-						mu.Lock()
-						extractErrors = append(extractErrors, err)
-						mu.Unlock()
-						return
-					}
-
-					// Check if this source is a listener type
-					s, err := NewSource(sc.Type, sc.Name, sc.Connection)
-					if err != nil {
-						mu.Lock()
-						extractErrors = append(extractErrors, err)
-						mu.Unlock()
-						return
-					}
-
-					if _, isListener := s.(Listener); !isListener {
+					if !isListenerSource[source] {
 						// Non-listener: use cached data
 						mu.Lock()
 						if cached, ok := staticCache[source]; ok {
 							data = append(data, cached...)
 							mu.Unlock()
-							s.Close()
 							return
 						}
 						mu.Unlock()
-					}
-					s.Close()
 
-					// Extract (listener sources block until data arrives)
-					result, err := etl.Extract(source, &pipeline)
+						// Extract once and cache
+						result, err := etl.Extract(source, &pipeline)
+						mu.Lock()
+						defer mu.Unlock()
+						if err != nil {
+							extractErrors = append(extractErrors, err)
+							return
+						}
+						staticCache[source] = result
+						data = append(data, result...)
+						return
+					}
+
+					// Listener source: use persistent connection
+					s := persistentSources[source]
+					if s == nil {
+						mu.Lock()
+						extractErrors = append(extractErrors, fmt.Errorf("no persistent source for %s", source))
+						mu.Unlock()
+						return
+					}
+
+					// Reconnect if dead
+					if aliver, ok := s.(Aliver); ok && !aliver.IsAlive() {
+						log.Printf("Reconnecting source %s...", source)
+						s.Close()
+						if err := s.Connect(); err != nil {
+							mu.Lock()
+							extractErrors = append(extractErrors, fmt.Errorf("reconnect failed for %s: %w", source, err))
+							mu.Unlock()
+							return
+						}
+					}
+
+					result, err := etl.ExtractFromSource(s, source, &pipeline)
 					mu.Lock()
 					defer mu.Unlock()
 
@@ -586,15 +684,7 @@ func (etl *ETL) Listen() error {
 						return
 					}
 
-					// Cache non-listener results
-					src2, _ := NewSource(sc.Type, sc.Name, sc.Connection)
-					if _, isListener := src2.(Listener); !isListener {
-						staticCache[source] = result
-					}
-					if src2 != nil {
-						src2.Close()
-					}
-
+					usedSources = append(usedSources, sourceExtraction{source, s})
 					data = append(data, result...)
 				}(sourceName)
 			}
@@ -602,6 +692,12 @@ func (etl *ETL) Listen() error {
 			wg.Wait()
 
 			if len(extractErrors) > 0 {
+				// NACK any pending deliveries on error
+				for _, se := range usedSources {
+					if acker, ok := se.source.(Acknowledger); ok {
+						acker.NackLast()
+					}
+				}
 				log.Printf("Extraction errors: %v", errors.Join(extractErrors...))
 				continue
 			}
@@ -616,21 +712,44 @@ func (etl *ETL) Listen() error {
 
 			data, err := etl.ApplyTransforms(pipeline, data)
 			if err != nil {
+				for _, se := range usedSources {
+					if acker, ok := se.source.(Acknowledger); ok {
+						acker.NackLast()
+					}
+				}
 				log.Printf("Transform failed for pipeline %s: %v", pipeline.Name, err)
 				continue
 			}
 
 			data, err = etl.ApplyFunctions(pipeline, data)
 			if err != nil {
+				for _, se := range usedSources {
+					if acker, ok := se.source.(Acknowledger); ok {
+						acker.NackLast()
+					}
+				}
 				log.Printf("Function failed for pipeline %s: %v", pipeline.Name, err)
 				continue
 			}
 
+			loadFailed := false
 			for _, targetRef := range pipeline.GetAllTargets() {
-				loadPipeline := pipeline
-				loadPipeline.Target = targetRef
-				if err := etl.Load(loadPipeline, data); err != nil {
+				if err := etl.Load(pipeline, targetRef, data); err != nil {
 					log.Printf("Load failed for pipeline %s target %s: %v", pipeline.Name, targetRef, err)
+					loadFailed = true
+				}
+			}
+
+			// ACK or NACK based on load success
+			for _, se := range usedSources {
+				if acker, ok := se.source.(Acknowledger); ok {
+					if loadFailed {
+						acker.NackLast()
+					} else {
+						if err := acker.AckLast(); err != nil {
+							log.Printf("ACK failed for source %s: %v", se.sourceName, err)
+						}
+					}
 				}
 			}
 

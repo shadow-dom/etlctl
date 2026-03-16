@@ -24,7 +24,6 @@ pipelines:
     - sources:
         - pizza_db
         - pizza_2_db
-      target: SQLite
       targets:
         - SQLite
         - target_node_5

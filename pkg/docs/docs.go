@@ -51,7 +51,7 @@ func GenerateETLDocs(etlConfig etl.ETL) {
 		docContent += fmt.Sprintf("\n### **Pipeline %d**\n", i+1)
 		docContent += fmt.Sprintf("- **Sources:** %s\n", strings.Join(pipeline.Sources, ", "))
 		docContent += fmt.Sprintf("- **Query:** `%s`\n", pipeline.Query)
-		docContent += fmt.Sprintf("- **Target:** `%s`\n", pipeline.Target)
+		docContent += fmt.Sprintf("- **Targets:** `%s`\n", strings.Join(pipeline.GetAllTargets(), ", "))
 		docContent += "- **Field Mappings:**\n"
 		for _, field := range pipeline.Fields {
 			docContent += fmt.Sprintf("  - `%s` → `%s`\n", field.Source, field.Target)
@@ -64,7 +64,9 @@ func GenerateETLDocs(etlConfig etl.ETL) {
 	diagramContent := "```mermaid\ngraph TD;\n"
 	for _, pipeline := range etlConfig.Pipelines {
 		for _, src := range pipeline.Sources {
-			diagramContent += fmt.Sprintf("    %s -->|%s| %s;\n", src, pipeline.Query, pipeline.Target)
+			for _, tgt := range pipeline.GetAllTargets() {
+				diagramContent += fmt.Sprintf("    %s -->|%s| %s;\n", src, pipeline.Query, tgt)
+			}
 		}
 	}
 	diagramContent += "```\n"

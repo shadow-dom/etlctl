@@ -25,8 +25,7 @@ type StorageConfig struct {
 type PipelineConfig struct {
 	Name         string         `json:"name"`
 	Sources      []string       `json:"sources"`
-	Target       string         `json:"target"`
-	Targets      []string       `json:"targets,omitempty"`
+	Targets      []string       `json:"targets"`
 	Fields       []FieldMapping `json:"fields"`
 	Query        string         `json:"query,omitempty"`
 	Functions    []string       `json:"functions,omitempty"`

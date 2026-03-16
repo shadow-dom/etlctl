@@ -27,7 +27,6 @@ targets:
 pipelines:
     - sources:
         - order_queue
-      target: json_log
       targets:
         - json_log
         - events_db

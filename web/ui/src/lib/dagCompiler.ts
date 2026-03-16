@@ -182,20 +182,13 @@ export function compileDag(
       tracking: first.targetNode.config.tracking || undefined,
     };
 
-    if (targetRefs.length === 1) {
-      pipelines.push({
-        name: `${first.pipelineSources.join('_')}_to_${targetLabels[0]}`,
-        target: targetRefs[0],
-        ...pipelineBase,
-      });
-    } else {
-      pipelines.push({
-        name: `${first.pipelineSources.join('_')}_to_${targetLabels.join('_')}`,
-        target: targetRefs[0],
-        targets: targetRefs,
-        ...pipelineBase,
-      });
-    }
+    pipelines.push({
+      name: targetLabels.length === 1
+        ? `${first.pipelineSources.join('_')}_to_${targetLabels[0]}`
+        : `${first.pipelineSources.join('_')}_to_${targetLabels.join('_')}`,
+      targets: targetRefs,
+      ...pipelineBase,
+    });
   }
 
   return { name, sources, targets, pipelines, queries, functions: functions.length > 0 ? functions : undefined };

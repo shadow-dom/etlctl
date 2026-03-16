@@ -49,7 +49,7 @@ func main() {
 				Name:    "{{.Name}}",
 				Sources: []string{ {{join .Sources ", "}} },
 				Query:   "{{.Query}}",
-				Target:  "{{.Target}}",
+				Targets: []string{ {{join .Targets ", "}} },
 				Fields: []etl.FieldMapping{
 					{{- range .Fields}}
 					{Source: "{{.Source}}", Target: "{{.Target}}"{{if .Transform}}, Transform: "{{.Transform}}"{{end}}},

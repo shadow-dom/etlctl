@@ -155,8 +155,7 @@ func toAPIResponse(e *etl.ETL) api.ETLResponse {
 		pc := api.PipelineConfig{
 			Name:         p.Name,
 			Sources:      p.Sources,
-			Target:       p.Target,
-			Targets:      p.Targets,
+			Targets:      p.GetAllTargets(),
 			Query:        p.Query,
 			Functions:    p.Functions,
 			UniqueFields: p.UniqueFields,
@@ -229,7 +228,6 @@ func fromAPIRequest(req api.ETLResponse) etl.ETL {
 		pipeline := etl.Pipeline{
 			Name:         p.Name,
 			Sources:      p.Sources,
-			Target:       p.Target,
 			Targets:      p.Targets,
 			Query:        p.Query,
 			Functions:    p.Functions,
