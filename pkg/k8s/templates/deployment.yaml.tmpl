@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: etl-{{.ETLName}}
+  namespace: {{.Namespace}}
+  labels:
+    app: etlctl
+    etl: {{.ETLName}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: etlctl
+      etl: {{.ETLName}}
+  template:
+    metadata:
+      labels:
+        app: etlctl
+        etl: {{.ETLName}}
+    spec:
+      containers:
+      - name: etl-{{.ETLName}}
+        image: {{.Image}}
+        command: ["./etlctl", "listen", "{{.ETLName}}", "--config-dir", "/etc/etlctl/configs"]
+        volumeMounts:
+        - name: config
+          mountPath: /etc/etlctl/configs
+          readOnly: true
+        envFrom:
+        - secretRef:
+            name: etl-{{.ETLName}}-secrets
+            optional: true
+      volumes:
+      - name: config
+        configMap:
+          name: etl-{{.ETLName}}-config
+      restartPolicy: Always

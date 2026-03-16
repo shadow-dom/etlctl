@@ -1,15 +1,20 @@
 package etl
 
 import (
-	"database/sql"
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+
+	"shadow-dom/etlctl/pkg/util/etl/transform"
 
 	"gopkg.in/yaml.v3"
 )
@@ -19,12 +24,46 @@ type Query struct {
 	SQL  string `yaml:"sql"`
 }
 
+type DeployConfig struct {
+	Schedule  string `yaml:"schedule,omitempty"`
+	Mode      string `yaml:"mode,omitempty"` // "cronjob" (default) or "service"
+	Namespace string `yaml:"namespace,omitempty"`
+	Image     string `yaml:"image,omitempty"`
+}
+
+// DAGNodeMeta stores visual layout for a node in the DAG editor.
+type DAGNodeMeta struct {
+	ID     string         `yaml:"id"     json:"id"`
+	Type   string         `yaml:"type"   json:"type"`
+	Label  string         `yaml:"label"  json:"label"`
+	X      float64        `yaml:"x"      json:"x"`
+	Y      float64        `yaml:"y"      json:"y"`
+	Config map[string]any `yaml:"config" json:"config"`
+}
+
+// DAGEdgeMeta stores a connection between two nodes.
+type DAGEdgeMeta struct {
+	ID     string `yaml:"id"     json:"id"`
+	Source string `yaml:"source" json:"source"`
+	Target string `yaml:"target" json:"target"`
+}
+
+// DAGLayout stores the visual DAG editor state.
+type DAGLayout struct {
+	Nodes []DAGNodeMeta `yaml:"nodes" json:"nodes"`
+	Edges []DAGEdgeMeta `yaml:"edges" json:"edges"`
+}
+
 type ETL struct {
-	Sources   []DBStorage `yaml:"sources"`
-	Targets   []DBStorage `yaml:"targets"`
-	Pipelines []Pipeline  `yaml:"pipelines"`
-	Queries   []Query     `yaml:"queries"`
-	Name      string      `yaml:"name"`
+	Sources   []StorageConfig  `yaml:"sources"`
+	Targets   []StorageConfig  `yaml:"targets"`
+	Pipelines []Pipeline       `yaml:"pipelines"`
+	Queries   []Query          `yaml:"queries"`
+	Functions []FunctionConfig `yaml:"functions,omitempty"`
+	Name      string           `yaml:"name"`
+	Deploy    DeployConfig     `yaml:"deploy,omitempty"`
+	Dag       *DAGLayout       `yaml:"dag,omitempty"`
+	ConfigDir string           `yaml:"-"`
 }
 
 func getQueryByName(name string, queries []Query) (string, error) {
@@ -33,22 +72,41 @@ func getQueryByName(name string, queries []Query) (string, error) {
 			return query.SQL, nil
 		}
 	}
-
-	response := fmt.Sprintf("invalid data storage requested: %s", name)
-
-	return "", errors.New(response)
+	return "", fmt.Errorf("invalid query requested: %s", name)
 }
 
-func getDBStorage(name string, storages []DBStorage) (*DBStorage, error) {
+func getStorageConfig(name string, storages []StorageConfig) (*StorageConfig, error) {
 	for _, storage := range storages {
 		if storage.Name == name {
 			return &storage, nil
 		}
 	}
+	return nil, fmt.Errorf("invalid data storage requested: %s", name)
+}
 
-	response := fmt.Sprintf("invalid data storage requested: %s", name)
+func getFunctionConfig(name string, functions []FunctionConfig) (*FunctionConfig, error) {
+	for _, fn := range functions {
+		if fn.Name == name {
+			return &fn, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown function: %s", name)
+}
 
-	return nil, errors.New(response)
+// ApplyFunctions runs the pipeline's function steps in order.
+func (etl *ETL) ApplyFunctions(pipeline Pipeline, data []map[string]string) ([]map[string]string, error) {
+	for _, fnName := range pipeline.Functions {
+		_, err := getFunctionConfig(fnName, etl.Functions)
+		if err != nil {
+			return nil, err
+		}
+		data, err = RunRegisteredFunction(fnName, data)
+		if err != nil {
+			return nil, fmt.Errorf("function %q failed: %w", fnName, err)
+		}
+		fmt.Printf("Applied function %s: %d rows\n", fnName, len(data))
+	}
+	return data, nil
 }
 
 func getDataForColumns(fields []string, data []map[string]string) string {
@@ -67,27 +125,88 @@ func getDataForColumns(fields []string, data []map[string]string) string {
 	return strings.Join(results, ", ")
 }
 
-func CreateETL(filePath string) (*ETL, error) {
-	data, err := os.ReadFile("../etls/" + filePath)
-
+func CreateETL(configDir string, name string) (*ETL, error) {
+	filePath := filepath.Join(configDir, name+".yaml")
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read ETL config %s: %w", filePath, err)
 	}
 
 	var etl ETL
 	if err := yaml.Unmarshal(data, &etl); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse ETL config: %w", err)
 	}
+
+	etl.ConfigDir = configDir
+
+	// Resolve connection references
+	resolveConnectionRefs(configDir, etl.Sources)
+	resolveConnectionRefs(configDir, etl.Targets)
 
 	return &etl, nil
 }
 
-func (etl *ETL) GetSource(name string) (*DBStorage, error) {
-	return getDBStorage(name, etl.Sources)
+// resolveConnectionRefs replaces connection_ref references with actual connection details
+// from the shared _connections.yaml file.
+func resolveConnectionRefs(configDir string, configs []StorageConfig) {
+	// Find configs that need resolution
+	needsResolve := false
+	for _, c := range configs {
+		if c.ConnectionRef != "" {
+			needsResolve = true
+			break
+		}
+	}
+	if !needsResolve {
+		return
+	}
+
+	// Load connections file
+	connFile := filepath.Join(configDir, "_connections.yaml")
+	data, err := os.ReadFile(connFile)
+	if err != nil {
+		return // No connections file, skip resolution
+	}
+
+	var connData struct {
+		Connections []struct {
+			Name       string            `yaml:"name"`
+			Type       string            `yaml:"type"`
+			Connection map[string]string `yaml:"connection"`
+		} `yaml:"connections"`
+	}
+	if err := yaml.Unmarshal(data, &connData); err != nil {
+		return
+	}
+
+	connMap := make(map[string]struct {
+		Type       string
+		Connection map[string]string
+	})
+	for _, c := range connData.Connections {
+		connMap[c.Name] = struct {
+			Type       string
+			Connection map[string]string
+		}{c.Type, c.Connection}
+	}
+
+	// Resolve references
+	for i := range configs {
+		if configs[i].ConnectionRef != "" {
+			if resolved, ok := connMap[configs[i].ConnectionRef]; ok {
+				configs[i].Type = resolved.Type
+				configs[i].Connection = resolved.Connection
+			}
+		}
+	}
 }
 
-func (etl *ETL) GetTarget(name string) (*DBStorage, error) {
-	return getDBStorage(name, etl.Targets)
+func (etl *ETL) GetSource(name string) (*StorageConfig, error) {
+	return getStorageConfig(name, etl.Sources)
+}
+
+func (etl *ETL) GetTarget(name string) (*StorageConfig, error) {
+	return getStorageConfig(name, etl.Targets)
 }
 
 func (etl *ETL) InjectSourceQueryWithState(source string, query string, pipeline Pipeline) string {
@@ -110,14 +229,39 @@ func duration(msg string, start time.Time) {
 	log.Printf("%v: %v\n", msg, time.Since(start))
 }
 
-func (etl *ETL) Deduplicate(uniqueFields []string, data []map[string]string) []map[string]string {
+func (etl *ETL) Deduplicate(uniqueFields []string, data []map[string]string, keepLast bool) []map[string]string {
 	defer duration(track("dedup"))
 
-	observed := make(map[string]bool)
-
-	var results []map[string]string
-
 	var sb strings.Builder
+
+	if keepLast {
+		// Iterate forward, overwriting map entries so the last occurrence wins
+		seen := make(map[string]int) // key -> index in results
+		var results []map[string]string
+
+		for _, record := range data {
+			for _, field := range uniqueFields {
+				if value, exists := record[field]; exists {
+					sb.WriteString(value)
+					sb.WriteString("|")
+				}
+			}
+			key := sb.String()
+			sb.Reset()
+
+			if idx, exists := seen[key]; exists {
+				results[idx] = record
+			} else {
+				seen[key] = len(results)
+				results = append(results, record)
+			}
+		}
+
+		return results
+	}
+
+	observed := make(map[string]bool)
+	var results []map[string]string
 
 	for _, record := range data {
 		for _, field := range uniqueFields {
@@ -160,156 +304,337 @@ func updateQueryWithState(pipeline Pipeline, source string, query string) (strin
 	return query, fmt.Errorf("missing state: could not load state for source (%s)", source)
 }
 
-func (etl *ETL) Extract(sourceName string, pipeline *Pipeline) []map[string]string {
-	err := pipeline.InitState()
-
-	if err != nil {
-		log.Fatal(err)
+func (etl *ETL) Extract(sourceName string, pipeline *Pipeline) ([]map[string]string, error) {
+	if err := pipeline.InitState(); err != nil {
+		return nil, err
 	}
 
-	fmt.Printf("Pulling data from %s...\n", sourceName)
-
-	source, err := etl.GetSource(sourceName)
-
+	sc, err := etl.GetSource(sourceName)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	query, err := getQueryByName(pipeline.Query, etl.Queries)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	query, err = updateQueryWithState(*pipeline, sourceName, query)
-
-	fmt.Println(query)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	sourceDB, err := source.Connect()
-
-	if err != nil {
-		log.Fatalf("Failed to connect to source: %v", err)
-	}
-
-	defer sourceDB.Close()
-
-	rows, err := sourceDB.Query(query)
-
-	if err != nil {
-		log.Fatal("Query execution failed:", err)
-	}
-
-	defer rows.Close()
-
-	cols, err := rows.Columns()
-
-	if err != nil {
-		log.Fatal("Failed to get column names:", err)
-	}
-
-	data := []map[string]string{}
-
-	for rows.Next() {
-		columnValues := make([]sql.NullString, len(cols))
-		columnPointers := make([]interface{}, len(cols))
-		for i := range columnValues {
-			columnPointers[i] = &columnValues[i]
+	// Resolve relative file paths against the config directory
+	conn := sc.Connection
+	if fp := conn["filepath"]; fp != "" && !filepath.IsAbs(fp) && !strings.HasPrefix(fp, "~/") {
+		conn = make(map[string]string)
+		for k, v := range sc.Connection {
+			conn[k] = v
 		}
-
-		if err := rows.Scan(columnPointers...); err != nil {
-			log.Fatal("Failed to scan row:", err)
-		}
-
-		rowData := make(map[string]string)
-		for i, colName := range cols {
-			if columnValues[i].Valid {
-				rowData[colName] = columnValues[i].String
-			} else {
-				rowData[colName] = ""
-			}
-		}
-
-		data = append(data, rowData)
+		conn["filepath"] = filepath.Join(etl.ConfigDir, fp)
 	}
 
-	fmt.Println("DONE!")
+	// Create source via registry
+	source, err := NewSource(sc.Type, sc.Name, conn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create source %s: %w", sourceName, err)
+	}
 
-	return data
+	if err := source.Connect(); err != nil {
+		return nil, fmt.Errorf("failed to connect to source %s: %w", sourceName, err)
+	}
+	defer source.Close()
+
+	// Build query (DB sources use SQL, others may ignore it)
+	query := ""
+	if pipeline.Query != "" {
+		query, err = getQueryByName(pipeline.Query, etl.Queries)
+		if err != nil {
+			return nil, err
+		}
+		query, _ = updateQueryWithState(*pipeline, sourceName, query)
+	}
+
+	data, err := source.Extract(query)
+	if err != nil {
+		return nil, fmt.Errorf("extraction failed for source %s: %w", sourceName, err)
+	}
+
+	if len(data) > 0 {
+		fmt.Printf("Extracted %d rows from %s\n", len(data), sourceName)
+	}
+	return data, nil
 }
 
 func (etl *ETL) Load(pipeline Pipeline, data []map[string]string) error {
-	sourceFields, targetFields := pipeline.GetFields()
 	targetName, targetTable := pipeline.GetTargetInfo()
 
 	fmt.Printf("Writing data to target %s...\n", targetName)
 
-	// Prepare insert statement for target
-	insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
-		targetTable,
-		strings.Join(targetFields, ", "),
-		getDataForColumns(sourceFields, data),
-	)
-
-	target, err := etl.GetTarget(targetName)
-
+	tc, err := etl.GetTarget(targetName)
 	if err != nil {
 		return err
 	}
 
-	targetDB, err := target.Connect()
+	// Resolve relative file paths against the config directory
+	conn := tc.Connection
+	if fp := conn["filepath"]; fp != "" && !filepath.IsAbs(fp) && !strings.HasPrefix(fp, "~/") {
+		conn = make(map[string]string)
+		for k, v := range tc.Connection {
+			conn[k] = v
+		}
+		conn["filepath"] = filepath.Join(etl.ConfigDir, fp)
+	}
 
+	// Create target via registry
+	target, err := NewTarget(tc.Type, tc.Name, conn)
 	if err != nil {
+		return fmt.Errorf("failed to create target %s: %w", targetName, err)
+	}
+
+	if err := target.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to target %s: %w", targetName, err)
+	}
+	defer target.Close()
+
+	if err := target.Load(targetTable, pipeline.Fields, data); err != nil {
 		return err
 	}
 
-	defer targetDB.Close()
-
-	_, err = targetDB.Exec(insertSQL)
-
-	if err != nil {
-		return err
-	}
-
+	fmt.Printf("Loaded %d rows into %s.%s\n", len(data), targetName, targetTable)
 	return nil
 }
 
-func (etl *ETL) Run() {
+// ApplyTransforms runs transform expressions on each row's fields.
+func (etl *ETL) ApplyTransforms(pipeline Pipeline, data []map[string]string) ([]map[string]string, error) {
+	hasTransforms := false
+	for _, f := range pipeline.Fields {
+		if f.Transform != "" {
+			hasTransforms = true
+			break
+		}
+	}
+	if !hasTransforms {
+		return data, nil
+	}
+
+	for i, row := range data {
+		for _, field := range pipeline.Fields {
+			if field.Transform == "" {
+				continue
+			}
+			val := row[field.Source]
+			transformed, err := transform.Apply(field.Transform, val)
+			if err != nil {
+				return nil, fmt.Errorf("transform error on field %q row %d: %w", field.Source, i, err)
+			}
+			row[field.Source] = transformed
+		}
+	}
+
+	return data, nil
+}
+
+func (etl *ETL) Run() error {
+	// Cache extracted data so shared sources aren't re-extracted across pipelines
+	extractCache := make(map[string][]map[string]string)
+
 	for _, pipeline := range etl.Pipelines {
+		pipeline.ConfigDir = etl.ConfigDir
 		data := make([]map[string]string, 0)
 
 		var mu sync.Mutex
 		var wg sync.WaitGroup
+		var extractErrors []error
 
 		for _, sourceName := range pipeline.Sources {
 			wg.Add(1)
 			go func(source string) {
 				defer wg.Done()
 
-				result := etl.Extract(source, &pipeline)
+				cacheKey := source + "|" + pipeline.Query
 
 				mu.Lock()
+				if cached, ok := extractCache[cacheKey]; ok {
+					data = append(data, cached...)
+					mu.Unlock()
+					return
+				}
+				mu.Unlock()
+
+				result, err := etl.Extract(source, &pipeline)
+
+				mu.Lock()
+				defer mu.Unlock()
+
+				if err != nil {
+					extractErrors = append(extractErrors, err)
+					return
+				}
 
 				if len(result) > 0 {
 					pipeline.UpdateTrackingState(source, result[len(result)-1])
 				}
 
+				extractCache[cacheKey] = result
 				data = append(data, result...)
-				mu.Unlock()
 			}(sourceName)
 		}
 
 		wg.Wait()
 
-		if len(pipeline.UniqueFields) > 0 && len(data) > 0 {
-			etl.Load(pipeline, etl.Deduplicate(pipeline.UniqueFields, data))
-		} else {
-			etl.Load(pipeline, data)
+		if len(extractErrors) > 0 {
+			return fmt.Errorf("extraction errors: %w", errors.Join(extractErrors...))
+		}
+
+		if len(data) == 0 {
+			fmt.Printf("No data extracted for pipeline %s, skipping load.\n", pipeline.Name)
+			continue
+		}
+
+		if len(pipeline.UniqueFields) > 0 {
+			data = etl.Deduplicate(pipeline.UniqueFields, data, pipeline.KeepLast)
+		}
+
+		// Apply transforms
+		data, err := etl.ApplyTransforms(pipeline, data)
+		if err != nil {
+			return fmt.Errorf("transform failed for pipeline %s: %w", pipeline.Name, err)
+		}
+
+		// Apply functions
+		data, err = etl.ApplyFunctions(pipeline, data)
+		if err != nil {
+			return fmt.Errorf("function failed for pipeline %s: %w", pipeline.Name, err)
+		}
+
+		// Load into all targets
+		for _, targetRef := range pipeline.GetAllTargets() {
+			loadPipeline := pipeline
+			loadPipeline.Target = targetRef
+			if err := etl.Load(loadPipeline, data); err != nil {
+				return fmt.Errorf("load failed for pipeline %s target %s: %w", pipeline.Name, targetRef, err)
+			}
 		}
 
 		pipeline.SaveState()
+	}
+
+	return nil
+}
+
+// Listen runs the ETL in listener mode for event-driven sources.
+// It loops continuously, extracting from listener sources on each iteration,
+// then running transform+load. Non-listener sources are extracted once and cached.
+func (etl *ETL) Listen() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Cache for non-listener source data (extracted once)
+	staticCache := make(map[string][]map[string]string)
+
+	fmt.Println("Starting listener mode...")
+
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("Shutting down listener...")
+			return nil
+		default:
+		}
+
+		for _, pipeline := range etl.Pipelines {
+			pipeline.ConfigDir = etl.ConfigDir
+			data := make([]map[string]string, 0)
+
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+			var extractErrors []error
+
+			for _, sourceName := range pipeline.Sources {
+				wg.Add(1)
+				go func(source string) {
+					defer wg.Done()
+
+					sc, err := etl.GetSource(source)
+					if err != nil {
+						mu.Lock()
+						extractErrors = append(extractErrors, err)
+						mu.Unlock()
+						return
+					}
+
+					// Check if this source is a listener type
+					s, err := NewSource(sc.Type, sc.Name, sc.Connection)
+					if err != nil {
+						mu.Lock()
+						extractErrors = append(extractErrors, err)
+						mu.Unlock()
+						return
+					}
+
+					if _, isListener := s.(Listener); !isListener {
+						// Non-listener: use cached data
+						mu.Lock()
+						if cached, ok := staticCache[source]; ok {
+							data = append(data, cached...)
+							mu.Unlock()
+							s.Close()
+							return
+						}
+						mu.Unlock()
+					}
+					s.Close()
+
+					// Extract (listener sources block until data arrives)
+					result, err := etl.Extract(source, &pipeline)
+					mu.Lock()
+					defer mu.Unlock()
+
+					if err != nil {
+						extractErrors = append(extractErrors, err)
+						return
+					}
+
+					// Cache non-listener results
+					src2, _ := NewSource(sc.Type, sc.Name, sc.Connection)
+					if _, isListener := src2.(Listener); !isListener {
+						staticCache[source] = result
+					}
+					if src2 != nil {
+						src2.Close()
+					}
+
+					data = append(data, result...)
+				}(sourceName)
+			}
+
+			wg.Wait()
+
+			if len(extractErrors) > 0 {
+				log.Printf("Extraction errors: %v", errors.Join(extractErrors...))
+				continue
+			}
+
+			if len(data) == 0 {
+				continue
+			}
+
+			if len(pipeline.UniqueFields) > 0 {
+				data = etl.Deduplicate(pipeline.UniqueFields, data, pipeline.KeepLast)
+			}
+
+			data, err := etl.ApplyTransforms(pipeline, data)
+			if err != nil {
+				log.Printf("Transform failed for pipeline %s: %v", pipeline.Name, err)
+				continue
+			}
+
+			data, err = etl.ApplyFunctions(pipeline, data)
+			if err != nil {
+				log.Printf("Function failed for pipeline %s: %v", pipeline.Name, err)
+				continue
+			}
+
+			for _, targetRef := range pipeline.GetAllTargets() {
+				loadPipeline := pipeline
+				loadPipeline.Target = targetRef
+				if err := etl.Load(loadPipeline, data); err != nil {
+					log.Printf("Load failed for pipeline %s target %s: %v", pipeline.Name, targetRef, err)
+				}
+			}
+
+			pipeline.SaveState()
+		}
 	}
 }

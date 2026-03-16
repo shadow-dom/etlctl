@@ -1,0 +1,35 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  log-sink:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/server.py"]
+    volumes:
+      - ./scripts/log-sink.py:/app/server.py:ro
+    ports:
+      - "8888:8888"
+
+  etlctl:
+    build:
+      context: ../..
+      dockerfile: examples/rabbitmq-local/Dockerfile
+    command: ["listen", "rabbitmq-events", "--config-dir", "/etc/etlctl/configs"]
+    volumes:
+      - etl-data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      log-sink:
+        condition: service_started
+
+volumes:
+  etl-data:

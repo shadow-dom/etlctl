@@ -1,0 +1,31 @@
+name: cronjob-demo
+sources:
+  - name: inline_employees
+    type: csv
+    connection:
+      inline_data: |
+        id,name,department,salary
+        1,Alice,Engineering,95000
+        2,Bob,Marketing,72000
+        3,Carol,Engineering,105000
+        4,David,Sales,68000
+        5,Eve,Marketing,77000
+targets:
+  - name: employee_db
+    type: sqlite3
+    connection:
+      filepath: /tmp/etlctl/cronjob-output.db
+pipelines:
+  - name: load_employees
+    sources: [inline_employees]
+    target: employee_db.employees
+    fields:
+      - { source: id, target: id }
+      - { source: name, target: full_name, transform: "uppercase" }
+      - { source: department, target: dept }
+      - { source: salary, target: salary, transform: "multiply:1.1" }
+queries: []
+deploy:
+  schedule: "*/1 * * * *"
+  namespace: etlctl
+  image: k3d-etlctl-registry:5000/etlctl:latest

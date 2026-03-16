@@ -1,0 +1,179 @@
+sources:
+    - name: order_queue
+      type: rabbitmq
+      connection:
+        prefetch_count: "10"
+        queue: orders
+        timeout: 5s
+        url: amqp://guest:guest@rabbitmq:5672/
+targets:
+    - name: json_log
+      type: json
+      connection:
+        filepath: /data/events.json
+    - name: events_db
+      type: sqlite3
+      connection:
+        filepath: /data/events.db
+    - name: csv_log
+      type: csv
+      connection:
+        filepath: /data/events.csv
+    - name: log_sink
+      type: api
+      connection:
+        method: POST
+        url: http://log-sink:8888/events
+pipelines:
+    - sources:
+        - order_queue
+      target: json_log
+      targets:
+        - json_log
+        - events_db
+        - csv_log
+        - log_sink
+      fields:
+        - source: order_id
+          target: order_id
+          transform: trim|title
+        - source: customer
+          target: customer_name
+          transform: trim|title
+        - source: item
+          target: item
+          transform: trim|title
+        - source: quantity
+          target: quantity
+          transform: trim|title
+        - source: total
+          target: total
+          transform: trim|title
+        - source: timestamp
+          target: event_time
+          transform: trim|title
+      functions:
+        - log_rows
+      tracking:
+        field: ""
+        storage_type: ""
+      name: order_queue_to_json_log_events_db_csv_log_log_sink
+      state:
+        sources: {}
+        storage_type: ""
+queries: []
+functions:
+    - name: log_rows
+      code: |
+        for _, row := range data {
+          fmt.Printf("ROW: %v\n", row)
+        }
+        return data, nil
+name: rabbitmq-events
+dag:
+    nodes:
+        - id: node_1
+          type: source
+          label: order_queue
+          x: 50
+          "y": 50
+          config:
+            connection:
+                prefetch_count: "10"
+                queue: orders
+                timeout: 5s
+                url: amqp://guest:guest@rabbitmq:5672/
+            storageType: rabbitmq
+        - id: node_2
+          type: function
+          label: log_rows
+          x: 500
+          "y": 50
+          config:
+            goCode: |
+                for _, row := range data {
+                  fmt.Printf("ROW: %v\n", row)
+                }
+                return data, nil
+        - id: node_3
+          type: target
+          label: json_log
+          x: 800
+          "y": 50
+          config:
+            connection:
+                filepath: /data/events.json
+            storageType: json
+        - id: node_4
+          type: target
+          label: events_db
+          x: 800
+          "y": 190
+          config:
+            connection:
+                filepath: /data/events.db
+            storageType: sqlite3
+        - id: node_5
+          type: target
+          label: csv_log
+          x: 800
+          "y": 330
+          config:
+            connection:
+                filepath: /data/events.csv
+            storageType: csv
+        - id: node_6
+          type: target
+          label: log_sink
+          x: 800
+          "y": 470
+          config:
+            connection:
+                method: POST
+                url: http://log-sink:8888/events
+            storageType: api
+        - id: node_7
+          type: transform
+          label: process_orders
+          x: 276
+          "y": 51
+          config:
+            expression: trim|title
+            fieldMappings:
+                - source: order_id
+                  target: order_id
+                  transform: ""
+                - source: customer
+                  target: customer_name
+                  transform: trim|title
+                - source: item
+                  target: item
+                  transform: uppercase
+                - source: quantity
+                  target: quantity
+                  transform: ""
+                - source: total
+                  target: total
+                  transform: ""
+                - source: timestamp
+                  target: event_time
+                  transform: ""
+    edges:
+        - id: edge_node_1_node_7
+          source: node_1
+          target: node_7
+        - id: edge_node_7_node_2
+          source: node_7
+          target: node_2
+        - id: edge_node_2_node_3
+          source: node_2
+          target: node_3
+        - id: edge_node_2_node_4
+          source: node_2
+          target: node_4
+        - id: edge_node_2_node_5
+          source: node_2
+          target: node_5
+        - id: edge_node_2_node_6
+          source: node_2
+          target: node_6

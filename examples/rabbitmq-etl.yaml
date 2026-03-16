@@ -1,0 +1,31 @@
+name: rabbitmq-demo
+sources:
+  - name: event_queue
+    type: rabbitmq
+    connection:
+      url: amqp://guest:guest@rabbitmq.etlctl.svc.cluster.local:5672/
+      queue: etl_events
+      prefetch_count: "10"
+      timeout: "10s"
+targets:
+  - name: events_json
+    type: json
+    connection:
+      filepath: /tmp/etlctl/events.json
+  - name: events_db
+    type: sqlite3
+    connection:
+      filepath: /tmp/etlctl/events.db
+pipelines:
+  - name: consume_events
+    sources: [event_queue]
+    targets: [events_json, events_db.events]
+    fields:
+      - { source: event_type, target: event_type, transform: "uppercase" }
+      - { source: user, target: user_name, transform: "trim|title" }
+      - { source: amount, target: amount }
+      - { source: timestamp, target: event_time }
+queries: []
+deploy:
+  namespace: etlctl
+  image: k3d-etlctl-registry:5000/etlctl:latest

@@ -1,0 +1,27 @@
+[
+  {
+    "domain": "alice@example.com",
+    "doubled_salary": "95000",
+    "name": "Alice Johnson"
+  },
+  {
+    "domain": "bob@example.com",
+    "doubled_salary": "72000",
+    "name": "Bob Smith"
+  },
+  {
+    "domain": "carol@example.com",
+    "doubled_salary": "105000",
+    "name": "Carol White"
+  },
+  {
+    "domain": "david@example.com",
+    "doubled_salary": "68000",
+    "name": "David Brown"
+  },
+  {
+    "domain": "eve@example.com",
+    "doubled_salary": "77000",
+    "name": "Eve Davis"
+  }
+]

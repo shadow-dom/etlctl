@@ -2,45 +2,66 @@ package main
 
 import (
 	"shadow-dom/etlctl/pkg/util/etl"
+	_ "shadow-dom/etlctl/pkg/util/etl/sources"
+	_ "shadow-dom/etlctl/pkg/util/etl/targets"
 )
 
 func main() {
-	var etl etl.ETL = etl.ETL{
-        Sources: []etl.DBStorage{
-			{{range .Sources}}
-			{
-				Name:       "{{.Name}}",
-				Type:       "{{.Type}}",
-				Connection: map[string]string{"filepath": `{{index .Connection "filepath"}}`},
-			},{{end}}
-		},
-		Queries: []etl.Query{
-			{{range .Queries}}
+	e := etl.ETL{
+		Name: "{{.Name}}",
+		Sources: []etl.StorageConfig{
+			{{- range .Sources}}
 			{
 				Name: "{{.Name}}",
-				SQL: `{{.SQL}}`,
-			},{{end}}
+				Type: "{{.Type}}",
+				Connection: map[string]string{
+					{{- range $key, $val := .Connection}}
+					"{{$key}}": `{{$val}}`,
+					{{- end}}
+				},
+			},
+			{{- end}}
 		},
-		Targets: []etl.DBStorage{
-			{{range .Targets}}
+		Queries: []etl.Query{
+			{{- range .Queries}}
 			{
-				Name:       "{{.Name}}",
-				Type:       "{{.Type}}",
-				Connection: map[string]string{"filepath": `{{index .Connection "filepath"}}`},
-			},{{end}}
+				Name: "{{.Name}}",
+				SQL:  `{{.SQL}}`,
+			},
+			{{- end}}
+		},
+		Targets: []etl.StorageConfig{
+			{{- range .Targets}}
+			{
+				Name: "{{.Name}}",
+				Type: "{{.Type}}",
+				Connection: map[string]string{
+					{{- range $key, $val := .Connection}}
+					"{{$key}}": `{{$val}}`,
+					{{- end}}
+				},
+			},
+			{{- end}}
 		},
 		Pipelines: []etl.Pipeline{
-			{{range .Pipelines}}
+			{{- range .Pipelines}}
 			{
+				Name:    "{{.Name}}",
 				Sources: []string{ {{join .Sources ", "}} },
 				Query:   "{{.Query}}",
 				Target:  "{{.Target}}",
 				Fields: []etl.FieldMapping{
-					{{range .Fields}}{Source: "{{.Source}}", Target: "{{.Target}}"}, {{end}}
+					{{- range .Fields}}
+					{Source: "{{.Source}}", Target: "{{.Target}}"{{if .Transform}}, Transform: "{{.Transform}}"{{end}}},
+					{{- end}}
 				},
-			},{{end}}
+				{{- if .UniqueFields}}
+				UniqueFields: []string{ {{join .UniqueFields ", "}} },
+				{{- end}}
+			},
+			{{- end}}
 		},
 	}
 
-    etl.Run()
+	e.Run()
 }

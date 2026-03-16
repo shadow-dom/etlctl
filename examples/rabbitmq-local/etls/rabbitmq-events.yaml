@@ -1,0 +1,52 @@
+name: rabbitmq-events
+
+sources:
+  - name: order_queue
+    type: rabbitmq
+    connection:
+      url: amqp://guest:guest@rabbitmq:5672/
+      queue: orders
+      prefetch_count: "10"
+      timeout: "5s"
+
+targets:
+  - name: json_log
+    type: json
+    connection:
+      filepath: /data/events.json
+  - name: events_db
+    type: sqlite3
+    connection:
+      filepath: /data/events.db
+  - name: csv_log
+    type: csv
+    connection:
+      filepath: /data/events.csv
+  - name: log_sink
+    type: api
+    connection:
+      url: http://log-sink:8888/events
+      method: POST
+
+functions:
+  - name: log_rows
+    code: |
+      for _, row := range data {
+        fmt.Printf("FUNCTION CALL: %v\n", row)
+      }
+      return data, nil
+
+pipelines:
+  - name: process_orders
+    sources: [order_queue]
+    targets: [json_log, events_db.orders, csv_log, log_sink]
+    functions: [log_rows]
+    fields:
+      - { source: order_id,   target: order_id }
+      - { source: customer,   target: customer_name, transform: "trim|title" }
+      - { source: item,       target: item,          transform: "uppercase" }
+      - { source: quantity,    target: quantity }
+      - { source: total,      target: total }
+      - { source: timestamp,  target: event_time }
+
+queries: []

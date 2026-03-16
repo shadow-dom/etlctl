@@ -1,0 +1,6 @@
+[
+  {"sku": "WIDGET-001", "name": "Blue Widget", "price": "19.99", "category": "Widgets", "in_stock": "true"},
+  {"sku": "GADGET-002", "name": "red gadget", "price": "49.50", "category": "Gadgets", "in_stock": "true"},
+  {"sku": "WIDGET-003", "name": "green widget", "price": "24.99", "category": "Widgets", "in_stock": "false"},
+  {"sku": "GADGET-004", "name": "silver gadget", "price": "99.00", "category": "Gadgets", "in_stock": "true"}
+]

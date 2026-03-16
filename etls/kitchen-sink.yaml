@@ -1,0 +1,391 @@
+sources:
+    - name: csv_employees
+      type: csv
+      connection:
+        filepath: data/kitchen-sink/employees.csv
+    - name: json_products
+      type: json
+      connection:
+        filepath: data/kitchen-sink/products.json
+    - name: sqlite_orders
+      type: sqlite3
+      connection:
+        filepath: data/kitchen-sink/seed.db
+    - name: api_items
+      type: api
+      connection:
+        method: GET
+        url: http://localhost:9999/items
+targets:
+    - name: emp_db
+      type: sqlite3
+      connection:
+        filepath: data/kitchen-sink/output.db
+    - name: products_csv
+      type: csv
+      connection:
+        filepath: data/kitchen-sink/products_export.csv
+    - name: orders_json
+      type: json
+      connection:
+        filepath: data/kitchen-sink/orders_export.json
+    - name: emp_db_api
+      type: sqlite3
+      connection:
+        filepath: data/kitchen-sink/output.db
+    - name: domains_json
+      type: json
+      connection:
+        filepath: data/kitchen-sink/domains.json
+    - name: api_sink
+      type: api
+      connection:
+        method: POST
+        url: http://localhost:9999/items
+pipelines:
+    - sources:
+        - csv_employees
+      target: emp_db.employees
+      fields:
+        - source: id
+          target: id
+        - source: name
+          target: full_name
+        - source: email
+          target: email
+        - source: department
+          target: dept
+        - source: salary
+          target: salary
+      tracking:
+        field: ""
+        storage_type: ""
+      name: csv_employees_to_emp_db
+      state:
+        sources: {}
+        storage_type: ""
+    - sources:
+        - json_products
+      target: products_csv
+      fields:
+        - source: sku
+          target: product_sku
+        - source: name
+          target: product_name
+          transform: title
+        - source: price
+          target: unit_price
+        - source: category
+          target: category
+      tracking:
+        field: ""
+        storage_type: ""
+      name: json_products_to_products_csv
+      state:
+        sources: {}
+        storage_type: ""
+    - sources:
+        - sqlite_orders
+      target: orders_json
+      fields: []
+      query: all_orders
+      tracking:
+        field: ""
+        storage_type: ""
+      name: sqlite_orders_to_orders_json
+      state:
+        sources: {}
+        storage_type: ""
+    - sources:
+        - api_items
+      target: emp_db_api.api_items
+      fields:
+        - source: id
+          target: item_id
+        - source: title
+          target: title
+          transform: uppercase
+        - source: status
+          target: status
+      tracking:
+        field: ""
+        storage_type: ""
+      name: api_items_to_emp_db_api
+      state:
+        sources: {}
+        storage_type: ""
+    - sources:
+        - csv_employees
+      target: domains_json
+      fields:
+        - source: name
+          target: name
+        - source: email
+          target: domain
+          transform: email_domain
+        - source: salary
+          target: doubled_salary
+          transform: multiply:2
+      tracking:
+        field: ""
+        storage_type: ""
+      name: csv_employees_to_domains_json
+      state:
+        sources: {}
+        storage_type: ""
+    - sources:
+        - csv_employees
+      target: api_sink
+      fields:
+        - source: name
+          target: employee_name
+        - source: department
+          target: dept
+      tracking:
+        field: ""
+        storage_type: ""
+      name: csv_employees_to_api_sink
+      state:
+        sources: {}
+        storage_type: ""
+queries:
+    - name: all_orders
+      sql: SELECT order_id, customer, product, quantity, total FROM orders
+name: kitchen-sink
+dag:
+    nodes:
+        - id: node_1
+          type: source
+          label: csv_employees
+          x: 50
+          "y": 50
+          config:
+            connection:
+                filepath: data/kitchen-sink/employees.csv
+            storageType: csv
+        - id: node_2
+          type: source
+          label: json_products
+          x: 50
+          "y": 200
+          config:
+            connection:
+                filepath: data/kitchen-sink/products.json
+            storageType: json
+        - id: node_3
+          type: source
+          label: sqlite_orders
+          x: 50
+          "y": 350
+          config:
+            connection:
+                filepath: data/kitchen-sink/seed.db
+            storageType: sqlite3
+        - id: node_4
+          type: source
+          label: api_items
+          x: 50
+          "y": 500
+          config:
+            connection:
+                method: GET
+                url: http://localhost:9999/items
+            storageType: api
+        - id: node_5
+          type: query
+          label: all_orders
+          x: 250
+          "y": 350
+          config:
+            queryMode: sql
+            sql: SELECT order_id, customer, product, quantity, total FROM orders
+        - id: node_6
+          type: transform
+          label: emp_mapping
+          x: 300
+          "y": 50
+          config:
+            expression: ""
+            fieldMappings:
+                - source: id
+                  target: id
+                  transform: ""
+                - source: name
+                  target: full_name
+                  transform: ""
+                - source: email
+                  target: email
+                  transform: ""
+                - source: department
+                  target: dept
+                  transform: ""
+                - source: salary
+                  target: salary
+                  transform: ""
+            mode: expressions
+        - id: node_7
+          type: transform
+          label: product_transform
+          x: 300
+          "y": 200
+          config:
+            expression: ""
+            fieldMappings:
+                - source: sku
+                  target: product_sku
+                  transform: ""
+                - source: name
+                  target: product_name
+                  transform: title
+                - source: price
+                  target: unit_price
+                  transform: ""
+                - source: category
+                  target: category
+                  transform: ""
+            mode: expressions
+        - id: node_8
+          type: transform
+          label: api_transform
+          x: 300
+          "y": 500
+          config:
+            expression: ""
+            fieldMappings:
+                - source: id
+                  target: item_id
+                  transform: ""
+                - source: title
+                  target: title
+                  transform: uppercase
+                - source: status
+                  target: status
+                  transform: ""
+            mode: expressions
+        - id: node_9
+          type: transform
+          label: domain_transform
+          x: 300
+          "y": 650
+          config:
+            expression: ""
+            fieldMappings:
+                - source: name
+                  target: name
+                  transform: ""
+                - source: email
+                  target: domain
+                  transform: email_domain
+                - source: salary
+                  target: doubled_salary
+                  transform: multiply:2
+            mode: expressions
+        - id: node_10
+          type: transform
+          label: api_push_mapping
+          x: 300
+          "y": 800
+          config:
+            expression: ""
+            fieldMappings:
+                - source: name
+                  target: employee_name
+                  transform: ""
+                - source: department
+                  target: dept
+                  transform: ""
+            mode: expressions
+        - id: node_11
+          type: target
+          label: emp_db
+          x: 600
+          "y": 50
+          config:
+            connection:
+                filepath: data/kitchen-sink/output.db
+            storageType: sqlite3
+            table: employees
+        - id: node_12
+          type: target
+          label: products_csv
+          x: 600
+          "y": 200
+          config:
+            connection:
+                filepath: data/kitchen-sink/products_export.csv
+            storageType: csv
+        - id: node_13
+          type: target
+          label: orders_json
+          x: 600
+          "y": 350
+          config:
+            connection:
+                filepath: data/kitchen-sink/orders_export.json
+            storageType: json
+        - id: node_14
+          type: target
+          label: emp_db_api
+          x: 600
+          "y": 500
+          config:
+            connection:
+                filepath: data/kitchen-sink/output.db
+            storageType: sqlite3
+            table: api_items
+        - id: node_15
+          type: target
+          label: domains_json
+          x: 600
+          "y": 650
+          config:
+            connection:
+                filepath: data/kitchen-sink/domains.json
+            storageType: json
+        - id: node_16
+          type: target
+          label: api_sink
+          x: 600
+          "y": 800
+          config:
+            connection:
+                method: POST
+                url: http://localhost:9999/items
+            storageType: api
+    edges:
+        - id: edge_node_1_node_6
+          source: node_1
+          target: node_6
+        - id: edge_node_6_node_11
+          source: node_6
+          target: node_11
+        - id: edge_node_2_node_7
+          source: node_2
+          target: node_7
+        - id: edge_node_7_node_12
+          source: node_7
+          target: node_12
+        - id: edge_node_3_node_5
+          source: node_3
+          target: node_5
+        - id: edge_node_5_node_13
+          source: node_5
+          target: node_13
+        - id: edge_node_4_node_8
+          source: node_4
+          target: node_8
+        - id: edge_node_8_node_14
+          source: node_8
+          target: node_14
+        - id: edge_node_1_node_9
+          source: node_1
+          target: node_9
+        - id: edge_node_9_node_15
+          source: node_9
+          target: node_15
+        - id: edge_node_1_node_10
+          source: node_1
+          target: node_10
+        - id: edge_node_10_node_16
+          source: node_10
+          target: node_16

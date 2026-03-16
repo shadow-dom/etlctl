@@ -1,37 +1,170 @@
-name: "multiple-pizza-shops"
 sources:
-  - name: "pizza_db"
-    type: "sqlite3"
-    connection:
-      filepath: "~/apps/projects/etlctl/etls/data/pizza.db"
-  - name: "pizza_2_db"
-    type: "sqlite3"
-    connection:
-      filepath: "~/apps/projects/etlctl/etls/data/pizza_2.db"
-queries:
-  - name: "get_pizzas"
-    sql: |
-      SELECT id, name, toppings FROM pizza;
+    - name: pizza_db
+      type: sqlite3
+      connection:
+        filepath: ~/apps/projects/etlctl/etls/data/pizza.db
+    - name: pizza_2_db
+      type: sqlite3
+      connection:
+        filepath: ~/apps/projects/etlctl/etls/data/pizza_2.db
 targets:
-  - name: "delivery_db"
-    type: "sqlite3"
-    connection:
-      filepath: "~/apps/projects/etlctl/etls/data/delivery.db"
+    - name: SQLite
+      type: sqlite3
+      connection:
+        filepath: ~/apps/projects/etlctl/etls/data/delivery.db
+    - name: target_node_5
+      type: json
+      connection:
+        filepath: ~/apps/projects/etlctl/etls/data/output.json
+    - name: target_node_7
+      type: csv
+      connection:
+        filepath: ~/apps/projects/etlctl/etls/data/output.json
 pipelines:
-  - name: "pizza_orders"
-    sources:
-      - "pizza_db"
-      - "pizza_2_db"
-    query: "get_pizzas"
-    target: "delivery_db.delivery"
-    fields:
-      - source: "name"
-        target: "name"
-      - source: "toppings"
-        target: "toppings"
-    uniqueFields:
-      - "name"
-      - "toppings"
-    tracking:
-      field: "id"
-      storage_type: file
+    - sources:
+        - pizza_db
+        - pizza_2_db
+      target: SQLite
+      targets:
+        - SQLite
+        - target_node_5
+        - target_node_7
+      fields:
+        - source: id
+          target: id
+        - source: name
+          target: name
+        - source: toppings
+          target: toppings
+      query: get_pizzas
+      tracking:
+        field: ""
+        storage_type: ""
+      name: pizza_db_pizza_2_db_to_SQLite_target_node_5_target_node_7
+      uniqueFields:
+        - name
+      state:
+        sources: {}
+        storage_type: ""
+queries:
+    - name: get_pizzas
+      sql: SELECT id, name, toppings FROM pizza
+name: multiple-pizza-shops
+dag:
+    nodes:
+        - id: node_1
+          type: source
+          label: pizza_db
+          x: 75.76354679802955
+          "y": 133
+          config:
+            connection:
+                filepath: ~/apps/projects/etlctl/etls/data/pizza.db
+            storageType: sqlite3
+        - id: node_2
+          type: source
+          label: pizza_2_db
+          x: 34
+          "y": 438
+          config:
+            connection:
+                filepath: ~/apps/projects/etlctl/etls/data/pizza_2.db
+            storageType: sqlite3
+        - id: node_3
+          type: query
+          label: get_pizzas
+          x: 302
+          "y": 426
+          config:
+            queryMode: sql
+            selectedColumns:
+                - dataType: INTEGER
+                  name: id
+                  nullable: true
+                  selected: true
+                  transform: ""
+                - dataType: TEXT
+                  name: name
+                  nullable: false
+                  selected: true
+                  transform: ""
+                - dataType: TEXT
+                  name: toppings
+                  nullable: false
+                  selected: true
+                  transform: ""
+            selectedTable: pizza
+            sql: SELECT id, name, toppings FROM pizza
+        - id: node_4
+          type: target
+          label: SQLite
+          x: 827
+          "y": 371
+          config:
+            connection:
+                filepath: ~/apps/projects/etlctl/etls/data/delivery.db
+            dedupEnabled: true
+            storageType: sqlite3
+            uniqueFields:
+                - name
+        - id: node_5
+          type: target
+          label: target_node_5
+          x: 829
+          "y": 203.25824555334336
+          config:
+            connection:
+                filepath: ~/apps/projects/etlctl/etls/data/output.json
+            dedupEnabled: true
+            storageType: json
+            uniqueFields:
+                - name
+        - id: node_6
+          type: transform
+          label: transform_node_6
+          x: 556
+          "y": 316
+          config:
+            expression: ""
+            fieldMappings:
+                - source: id
+                  target: id
+                  transform: ""
+                - source: name
+                  target: name
+                  transform: ""
+                - source: toppings
+                  target: toppings
+                  transform: ""
+            mode: expressions
+        - id: node_7
+          type: target
+          label: target_node_7
+          x: 830.9279093736945
+          "y": 499.4612083788819
+          config:
+            connection:
+                filepath: ~/apps/projects/etlctl/etls/data/output.json
+            dedupEnabled: true
+            storageType: csv
+            uniqueFields:
+                - name
+    edges:
+        - id: edge_node_1_node_6
+          source: node_1
+          target: node_6
+        - id: edge_node_3_node_6
+          source: node_3
+          target: node_6
+        - id: edge_node_6_node_4
+          source: node_6
+          target: node_4
+        - id: edge_node_6_node_5
+          source: node_6
+          target: node_5
+        - id: edge_node_2_node_3
+          source: node_2
+          target: node_3
+        - id: edge_node_6_node_7
+          source: node_6
+          target: node_7

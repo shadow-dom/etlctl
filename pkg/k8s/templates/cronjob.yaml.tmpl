@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etl-{{.ETLName}}
+  namespace: {{.Namespace}}
+  labels:
+    app: etlctl
+    etl: {{.ETLName}}
+spec:
+  schedule: "{{.Schedule}}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: etlctl
+            etl: {{.ETLName}}
+        spec:
+          containers:
+          - name: etl-{{.ETLName}}
+            image: {{.Image}}
+            command: ["./etlctl", "run", "{{.ETLName}}", "--config-dir", "/etc/etlctl/configs"]
+            volumeMounts:
+            - name: config
+              mountPath: /etc/etlctl/configs
+              readOnly: true
+            envFrom:
+            - secretRef:
+                name: etl-{{.ETLName}}-secrets
+                optional: true
+          volumes:
+          - name: config
+            configMap:
+              name: etl-{{.ETLName}}-config
+          restartPolicy: OnFailure

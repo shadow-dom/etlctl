@@ -1,0 +1,30 @@
+[
+  {
+    "customer": "Alice",
+    "order_id": "ORD-001",
+    "product": "Widget",
+    "quantity": "2",
+    "total": "39.98"
+  },
+  {
+    "customer": "Bob",
+    "order_id": "ORD-002",
+    "product": "Gadget",
+    "quantity": "1",
+    "total": "49.50"
+  },
+  {
+    "customer": "Carol",
+    "order_id": "ORD-003",
+    "product": "Widget",
+    "quantity": "5",
+    "total": "99.95"
+  },
+  {
+    "customer": "Alice",
+    "order_id": "ORD-004",
+    "product": "Gadget",
+    "quantity": "1",
+    "total": "49.50"
+  }
+]

@@ -1,0 +1,151 @@
+_version_meta:
+    version: 1
+    label: v1.0.0
+    created_at: "2026-03-15T11:21:31Z"
+    is_draft: false
+dag:
+    edges:
+        - id: edge_node_1_node_6
+          source: node_1
+          target: node_6
+        - id: edge_node_2_node_6
+          source: node_2
+          target: node_6
+        - id: edge_node_3_node_6
+          source: node_3
+          target: node_6
+        - id: edge_node_6_node_4
+          source: node_6
+          target: node_4
+        - id: edge_node_6_node_5
+          source: node_6
+          target: node_5
+    nodes:
+        - config:
+            connection:
+                filepath: ~/apps/projects/etlctl/etls/data/pizza.db
+            storageType: sqlite3
+          id: node_1
+          label: pizza_db
+          type: source
+          x: 48.76354679802956
+          "y": 50
+        - config:
+            connection:
+                filepath: ~/apps/projects/etlctl/etls/data/pizza_2.db
+            storageType: sqlite3
+          id: node_2
+          label: pizza_2_db
+          type: source
+          x: 49
+          "y": 190
+        - config:
+            sql: |
+                SELECT id, name, toppings FROM pizza;
+          id: node_3
+          label: get_pizzas
+          type: query
+          x: 125
+          "y": 380
+        - config:
+            connection:
+                filepath: ~/apps/projects/etlctl/etls/data/delivery.db
+            dedupEnabled: true
+            storageType: sqlite3
+            uniqueFields:
+                - name
+          id: node_4
+          label: SQLite
+          type: target
+          x: 650
+          "y": 50
+        - config:
+            connection: {}
+            dedupEnabled: true
+            storageType: json
+          id: node_5
+          label: target_node_5
+          type: target
+          x: 650
+          "y": 150
+        - config:
+            expression: ""
+            fieldMappings:
+                - source: id
+                  target: id
+                  transform: ""
+                - source: name
+                  target: name
+                  transform: ""
+                - source: toppings
+                  target: toppings
+                  transform: ""
+            mode: expressions
+          id: node_6
+          label: transform_node_6
+          type: transform
+          x: 379
+          "y": 113
+name: multiple-pizza-shops
+pipelines:
+    - fields:
+        - source: id
+          target: id
+        - source: name
+          target: name
+        - source: toppings
+          target: toppings
+      name: pizza_db_pizza_2_db_to_SQLite
+      query: get_pizzas
+      sources:
+        - pizza_db
+        - pizza_2_db
+      state:
+        sources: {}
+        storage_type: ""
+      target: SQLite
+      tracking:
+        field: ""
+        storage_type: ""
+      uniqueFields:
+        - name
+    - fields:
+        - source: id
+          target: id
+        - source: name
+          target: name
+        - source: toppings
+          target: toppings
+      name: pizza_db_pizza_2_db_to_target_node_5
+      query: get_pizzas
+      sources:
+        - pizza_db
+        - pizza_2_db
+      state:
+        sources: {}
+        storage_type: ""
+      target: target_node_5
+      tracking:
+        field: ""
+        storage_type: ""
+queries:
+    - name: get_pizzas
+      sql: |
+        SELECT id, name, toppings FROM pizza;
+sources:
+    - connection:
+        filepath: ~/apps/projects/etlctl/etls/data/pizza.db
+      name: pizza_db
+      type: sqlite3
+    - connection:
+        filepath: ~/apps/projects/etlctl/etls/data/pizza_2.db
+      name: pizza_2_db
+      type: sqlite3
+targets:
+    - connection:
+        filepath: ~/apps/projects/etlctl/etls/data/delivery.db
+      name: SQLite
+      type: sqlite3
+    - connection: {}
+      name: target_node_5
+      type: json

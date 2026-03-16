@@ -6,12 +6,29 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func Run(name string) {
-	etl, err := CreateETL(name + ".yaml")
-
+func Run(configDir string, name string) error {
+	etl, err := CreateETL(configDir, name)
 	if err != nil {
-		log.Fatalf("Failed to load etl from config: %v", err)
+		return err
 	}
 
-	etl.Run()
+	return etl.Run()
+}
+
+// Listen starts the named ETL in listener mode for event-driven sources.
+func Listen(configDir string, name string) error {
+	etl, err := CreateETL(configDir, name)
+	if err != nil {
+		return err
+	}
+
+	return etl.Listen()
+}
+
+// RunSimple is a convenience wrapper that uses the default config directory.
+// Kept for backward compatibility.
+func RunSimple(name string) {
+	if err := Run("../etls", name); err != nil {
+		log.Fatalf("Failed to run ETL: %v", err)
+	}
 }
